@@ -2,6 +2,7 @@ mod subsystems;
 mod robot;
 mod localization;
 mod helpers;
+mod motion_control;
 
 extern crate alloc;
 
@@ -11,10 +12,11 @@ use alloc::rc::Rc;
 use subsystems::*;
 use robot::Robot;
 use localization::odometry::*;
+use motion_control::ramsete::test;
 use helpers::*;
 use std::fs::*;
 use std::io::{Result, Write};
-use std::time::Duration;
+use std::time::*;
 
 use crate::localization::localization::Localization;
 
@@ -31,12 +33,14 @@ async fn main(peripherals: Peripherals) {
         .create(true)
         .append(true)
         .open("velocity_file.txt")
-        .expect("failed to create test_file!");
+        .expect("failed to create velocity_file!");
+    //testing loading ~500kb into a string
+    // let timer = Instant::now();
+    // let mut _contents = read_to_string("velocity_file.txt").unwrap();
+    // println!("Elapsed: {}", timer.elapsed().as_millis());
+    test().await;
 
-    // for _ in 0..2048 {
-    //     write!(test_file, "i").expect("can't write?");
-    // }
-    
+    return ;
 
     /* DRIVETRAIN */
     let left_motor_a = Motor::new(peripherals.port_12, Gearset::Blue, Direction::Forward);
@@ -87,28 +91,58 @@ async fn main(peripherals: Peripherals) {
     // (motor.velocity() is too noisy). Locks the drivetrain only briefly each
     // tick and releases before awaiting, so it never blocks driving/odometry.
     let velocity_dt = Rc::clone(&drivetrain);
-    let _velocity_task = spawn(async move {
-        let mut tick = 0;
-        loop {
-            {
-                let mut dt = velocity_dt.try_lock().expect("dt locked in velocity task");
-                dt.tick_vel();
-                let avg = (dt.left_side.get_velocity() + dt.right_side.get_velocity()) / 2.0;
-                writeln!(velocity_file, "{}", avg).expect("can't write to vel file!");
+    // let _velocity_task = spawn(async move {
+    //     let mut tick = 0;
+    //     loop {
+    //         {
+    //             let mut dt = velocity_dt.try_lock().expect("dt locked in velocity task");
+    //             dt.spin_left_v(12.0);
+    //             dt.spin_right_v(12.0);
+    //             dt.tick_vel();
+    //             let avg = (dt.left_side.get_velocity() + dt.right_side.get_velocity()) / 2.0;
+    //             writeln!(velocity_file, "{}", avg).expect("can't write to vel file!");
 
-                if tick % 10 == 0 {
-                    velocity_file.flush().ok();
-                    tick = 0
-                }
+    //             if tick % 10 == 0 {
+    //                 velocity_file.flush().ok();
+    //                 tick = 0
+    //             }
 
-                tick += 1;
-            }
-            sleep(SLEEP_INTERVAL).await;
-        }
-    });
+    //             tick += 1;
+    //         }
+    //         sleep(SLEEP_INTERVAL).await;
+    //     }
+    // });
 
     let _localization_task = spawn(localization.run());
-    robot.compete().await
+
+    //TESTING VELOCITY READINGS
+    let mut tick: u32 = 0;
+    let time = Instant::now();
+    writeln!(velocity_file, "timestamp, velocity").expect("can't write!");
+    loop {
+        {
+            let mut dt = velocity_dt.try_lock().expect("dt locked in velocity task");
+            dt.spin_left_v(12.0);
+            dt.spin_right_v(12.0);
+            dt.tick_vel();
+            let avg = (dt.left_side.get_velocity() + dt.right_side.get_velocity()) / 2.0;
+            writeln!(velocity_file, "{}, {}", time.elapsed().as_secs_f64(), avg).expect("can't write to vel file!");
+
+            if tick % 10 == 0 {
+                velocity_file.flush().ok();
+                tick = 0
+            }
+
+            tick += 1;
+        }
+        let elapsed = time.elapsed().as_secs_f64();
+        if elapsed > 3.0 {
+            break;
+        }
+        sleep(SLEEP_INTERVAL).await;
+    }
+
+    // robot.compete().await
 }
 
 #[cfg(test)]

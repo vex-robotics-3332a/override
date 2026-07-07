@@ -4,6 +4,7 @@ use alloc::rc::Rc;
 use vexide::math::Angle;
 use vexide::prelude::*;
 use vexide::sync::Mutex;
+use vexide::time::LowResolutionTime;
 use crate::localization::odometry::Encoder;
 
 //imperial units pls
@@ -52,11 +53,12 @@ impl DriveSide {
     }
 
     pub fn tick_vel(&mut self) {
-        let now = self.clock.elapsed().as_secs_f64() / 60.0;
+        let motor = &self.motors[self.priority];
+        let now = motor.timestamp().unwrap_or(LowResolutionTime::now()).elapsed().as_secs_f64() / 60.0; 
         let dt_min = now - self.last_update;
         let current = self.motors[self.priority].position().unwrap_or(Angle::ZERO);
         if dt_min > 0.0 {
-            self.velocity = (current - self.prev_position).as_turns() / dt_min;
+            self.velocity = (current - self.prev_position).as_turns() / 0.000166667;
         }
         self.prev_position = current;
         self.last_update = now;
