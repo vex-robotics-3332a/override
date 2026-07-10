@@ -3,10 +3,11 @@ use std::{time::Instant, fs::*};
 use std::io::{Result, Write};
 use serde::Deserialize;
 use crate::subsystems::drivetrain::Drivetrain;
+use crate::chassis::Chassis;
 use crate::SLEEP_INTERVAL;
 
 #[derive(Deserialize)]
-struct MotionProfile {
+pub struct MotionProfile {
     pub points: Vec<Point>,
 
     #[serde(skip)]
@@ -20,7 +21,7 @@ struct MotionProfile {
 }
 
 #[derive(Deserialize)]
-struct Point {
+pub struct Point {
     pub p: (f32, f32, f32),
     pub lv: f32,
     pub av: f32,
@@ -28,6 +29,12 @@ struct Point {
 }
 
 impl MotionProfile {
+    pub fn new(path: &str) -> Self {
+        let profile_string = read_to_string(path).unwrap();
+        let mp: MotionProfile = serde_json::from_str(&profile_string).unwrap();
+        mp
+    }
+
     pub fn start(&mut self) {
         self.time = Some(Instant::now());
         self.total_time = self.points[self.points.len() - 1].t
@@ -56,10 +63,41 @@ impl MotionProfile {
     }
 }
 
+impl Chassis {
+    pub async fn drive_along(&mut self, profile: &mut MotionProfile) {
+        profile.start();
+        loop {
+            let mut dt = self.drivetrain.try_lock().expect("Dt lock failed while driving");
+            let point = profile.get_point();
+
+            let lv = point.lv as f64;
+            let av = point.av as f64;
+            
+            let left_velocity = dt.to_pct_speed(lv + av * dt.track_width / 2.0);
+            let right_velocity = dt.to_pct_speed(lv - av * dt.track_width / 2.0);
+
+            dt.spin_left(left_velocity);
+            dt.spin_right(right_velocity);
+
+            drop(dt);
+
+            sleep(SLEEP_INTERVAL).await;
+        }
+    }
+}
+
+
+
+
+
+
+
+
+
 
 
 // testing time mapping
-pub async fn test() {
+pub async fn test_time_mapping() {
     let mut output = File::create("profile_testing_file.txt").unwrap();
     let profile_string = read_to_string("profile1.json").unwrap();
     let mut  motion_profile: MotionProfile = serde_json::from_str(&profile_string).unwrap();
@@ -71,6 +109,17 @@ pub async fn test() {
         if motion_profile.has_ended() { break; }
         sleep(SLEEP_INTERVAL).await;
     }
-    
 }
+
+pub async fn test_velocity_grepping() {
+    let mut output = File::create("profile_testing_file.txt").unwrap();
+    let profile_string = read_to_string("vcTuning1.json").unwrap();
+    let motion_profile: MotionProfile = serde_json::from_str(&profile_string).unwrap();
+
+    writeln!(output, "timestamp,velocity").ok();
+    for i in 0..(motion_profile.points.len() - 1) {
+        writeln!(output, "{}, {}", motion_profile.points[i].t, motion_profile.points[i].lv).expect("RAHH");
+    }
+}
+
 

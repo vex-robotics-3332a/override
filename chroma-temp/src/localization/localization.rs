@@ -3,8 +3,8 @@ use vexide::math::Angle;
 use super::odometry::{Odometry, Encoder};
 use crate::helpers::Pose;
 
-pub struct Localization<L: Encoder, H: Encoder> {
-    pub odometry: Odometry<L, H>,
+pub struct Localization {
+    pub odometry: Odometry,
     pub imu: InertialSensor,
     //expandable later for distance sensors etc.
     pub pose: Pose, 
@@ -12,8 +12,8 @@ pub struct Localization<L: Encoder, H: Encoder> {
     previous_heading: Angle
 }
 
-impl<L: Encoder, H: Encoder> Localization<L, H> {
-    pub fn new(odometry: Odometry<L, H>, imu: InertialSensor) -> Self {
+impl Localization {
+    pub fn new(odometry: Odometry, imu: InertialSensor) -> Self {
         Self {
             odometry,
             imu,

@@ -78,20 +78,20 @@ impl Encoder for NullPod {
     }
 }
 
-pub struct Odometry<L: Encoder, H: Encoder> {
-    pub linear_encoder: L,
-    pub horizontal_encoder: H,
+pub struct Odometry {
+    pub linear_encoder: Box<dyn Encoder>,
+    pub horizontal_encoder: Box<dyn Encoder>,
 
     previous_linear_travel: f64,
     previous_horizontal_travel: f64,
 }
 
-impl<L: Encoder, H: Encoder> Odometry<L, H> {
+impl Odometry {
     pub fn new(
         // as per Daniel from 5069Y's suggestion you are a bum if you have
         // more than one linear tracker
-        linear_encoder: L,
-        horizontal_encoder: H,
+        linear_encoder: Box<dyn Encoder>,
+        horizontal_encoder: Box<dyn Encoder>,
     ) -> Self {
         Self {
             linear_encoder,

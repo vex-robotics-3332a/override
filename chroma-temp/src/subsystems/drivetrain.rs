@@ -5,6 +5,7 @@ use vexide::math::Angle;
 use vexide::prelude::*;
 use vexide::sync::Mutex;
 use vexide::time::LowResolutionTime;
+use crate::SLEEP_INTERVAL;
 use crate::localization::odometry::Encoder;
 
 //imperial units pls
@@ -19,10 +20,12 @@ pub struct DriveSide {
     pub priority: usize,
     pub velocity_controller: VelocityController,
 
-    velocity: f64,
+    pub velocity: f64,
     prev_position: Angle,
     last_update: f64,
-    clock: Instant
+    clock: Instant,
+
+    pub voltage_percentage: f64
 }
 
 impl DriveSide {
@@ -48,17 +51,21 @@ impl DriveSide {
             velocity: 0.0,
             prev_position: Angle::ZERO,
             last_update: 0.0,
-            clock: Instant::now()
+            clock: Instant::now(),
+            voltage_percentage: 0.0 
         }
     }
 
     pub fn tick_vel(&mut self) {
+        let max_rpm = self.velocity_controller.gearset.max_rpm();
         let motor = &self.motors[self.priority];
         let now = motor.timestamp().unwrap_or(LowResolutionTime::now()).elapsed().as_secs_f64() / 60.0; 
         let dt_min = now - self.last_update;
         let current = self.motors[self.priority].position().unwrap_or(Angle::ZERO);
         if dt_min > 0.0 {
-            self.velocity = (current - self.prev_position).as_turns() / 0.000166667;
+            let rpm_velocity = (current - self.prev_position).as_turns() / 0.000166667;
+            self.velocity = rpm_velocity / max_rpm * 100.0
+            //0.000166667 mins -> 10ms
         }
         self.prev_position = current;
         self.last_update = now;
@@ -66,20 +73,14 @@ impl DriveSide {
 
     pub fn spin(&mut self, pct: f64) {
         let power = self.velocity_controller.get_power(pct, self.velocity);
-        for motor in &mut self.motors {
-            motor.set_voltage(power).ok();
-        }
+        self.spin_v(power);
     }
 
     pub fn spin_v(&mut self, v: f64) {
         for motor in &mut self.motors {
             motor.set_voltage(v).ok();
         }
-    }
-
-    pub fn get_velocity (&self) -> f64 {
-        // self.velocity
-        self.motors[self.priority].velocity().unwrap_or_default()
+        self.voltage_percentage = v / 12.0 * 100.0;
     }
 
     fn get_travel(&self) -> f64 {
@@ -105,10 +106,7 @@ impl VelocityController {
     }
 
     pub fn get_power(&self, pct: f64, vel: f64) -> f64 {
-        let max_rpm = self.gearset.max_rpm();
-        let desired_rpm = max_rpm * pct / 100.0;
-        
-        let error_v = (vel - desired_rpm) / max_rpm * 12.0;
+        let error_v = (pct - vel) / 100.0 * 12.0;
 
         pct / 100.0 * 12.0 * self.ff + error_v * self.kp
     }
@@ -134,6 +132,12 @@ impl Drivetrain {
             right_side,
             track_width,
         }
+    }
+
+    pub fn to_pct_speed(&self, ins: f64) -> f64 {
+        // in/s speed
+        let max = self.left_side.wheel_diameter * PI * self.left_side.velocity_controller.gearset.max_rpm() / 60.0;
+        ins / max * 100.0
     }
 
     pub fn spin_left(&mut self, pct: f64) {
@@ -168,6 +172,15 @@ impl Drivetrain {
     pub fn tick_vel(&mut self) {
         self.left_side.tick_vel();
         self.right_side.tick_vel();
+    }
+
+    pub async fn run_vel_ticking(dt: Rc<Mutex<Drivetrain>>) {
+        loop {
+            let mut vel_dt = dt.try_lock().expect("Dt locked while ticking vel!");
+            vel_dt.tick_vel();
+            drop(vel_dt);
+            sleep(SLEEP_INTERVAL).await;
+        }
     }
 }
 
