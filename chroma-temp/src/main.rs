@@ -19,6 +19,7 @@ use std::fs::*;
 use std::io::{Result, Write};
 use std::time::*;
 
+use crate::chassis::Chassis;
 use crate::localization::localization::Localization;
 use crate::subsystems::drivetrain::Drivetrain;
 
@@ -78,38 +79,12 @@ async fn main(peripherals: Peripherals) {
     let robot = Robot::new(Rc::clone(&drivetrain), controller);
 
     /* Task spawning */
-    let _localization_task = spawn(localization.run());
-    let _velocity_task = spawn(Drivetrain::run_vel_ticking(Rc::clone(&drivetrain)));
+    let mut chassis = Chassis::new(
+        Rc::clone(&drivetrain),
+        localization
+    );
 
-    // let mut velo_tuning_profile = MotionProfile::new("vcTuning1.json");
-    
-    // velo_tuning_profile.start();
-
-    // let mut desired_velocity_file = File::create("desired_velocity.txt").unwrap();
-    // let mut actual_velocity_file = File::create("actual_velocity.txt").unwrap();
-    // let mut voltage_file = File::create("voltage.txt").unwrap();
-
-    // writeln!(desired_velocity_file, "timestamp,desired").ok();
-    // writeln!(actual_velocity_file, "timestamp,actual").ok();
-    // writeln!(voltage_file, "timestamp,voltage").ok();
-
-    // let timer = Instant::now();
-    // loop {
-    //     let time = timer.elapsed().as_millis() as f64;
-    //     let mut dt = velocity_dt.try_lock().expect("how");
-    //     dt.tick_vel();
-    //     let point = velo_tuning_profile.get_point();
-    //     dt.spin_left(point.lv as f64);
-    //     dt.spin_right(point.lv as f64);
-
-    //     writeln!(desired_velocity_file, "{}, {}", time, point.lv).ok();
-    //     writeln!(actual_velocity_file, "{}, {}", time, (dt.left_side.velocity + dt.right_side.velocity) / 2.0).ok();
-    //     writeln!(voltage_file, "{}, {}", time, (dt.left_side.voltage_percentage + dt.right_side.voltage_percentage) / 2.0).ok();
-    //     drop(dt);
-    //     if velo_tuning_profile.has_ended() { return ; }
-
-    //     sleep(SLEEP_INTERVAL).await;
-    // }
+    chassis.init();
 
     robot.compete().await
 }

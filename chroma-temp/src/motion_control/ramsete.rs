@@ -65,6 +65,7 @@ impl MotionProfile {
 
 impl Chassis {
     pub async fn drive_along(&mut self, profile: &mut MotionProfile) {
+        // running fully raw (no correction) to see if the profile is roughly correct
         profile.start();
         loop {
             let mut dt = self.drivetrain.try_lock().expect("Dt lock failed while driving");
