@@ -3,6 +3,7 @@ use std::time::Instant;
 use alloc::rc::Rc;
 use vexide::math::Angle;
 use vexide::prelude::*;
+use vexide::smart::motor::BrakeMode;
 use vexide::sync::Mutex;
 use vexide::time::LowResolutionTime;
 use crate::SLEEP_INTERVAL;
@@ -117,8 +118,7 @@ pub struct Drivetrain {
     pub right_side: DriveSide,
 
     pub track_width: f64,
-
-
+    pub brake_mode: BrakeMode
 }
 
 impl Drivetrain {
@@ -131,6 +131,7 @@ impl Drivetrain {
             left_side,
             right_side,
             track_width,
+            brake_mode: BrakeMode::Coast
         }
     }
 
@@ -156,19 +157,6 @@ impl Drivetrain {
         self.right_side.spin_v(v);
     }
 
-    fn get_travel(&self) -> f64 {
-        (self.left_side.get_travel() + self.right_side.get_travel()) / 2.0 
-    }
-
-    fn reset_travel(&mut self) {
-        self.left_side.reset_travel();
-        self.right_side.reset_travel();
-    }
-
-    fn get_offset(&self) -> f64 {
-        0.0
-    }
-
     pub fn tick_vel(&mut self) {
         self.left_side.tick_vel();
         self.right_side.tick_vel();
@@ -182,15 +170,20 @@ impl Drivetrain {
             sleep(SLEEP_INTERVAL).await;
         }
     }
+
+    
 }
 
 impl Encoder for Rc<Mutex<Drivetrain>> {
     fn get_travel(&self) -> f64 {
-        self.try_lock().expect("Dt locked while getting travel").get_travel()
+        let dt = self.try_lock().expect("Dt locked while getting travel");
+        (dt.left_side.get_travel() + dt.right_side.get_travel()) / 2.0 
     }
 
     fn reset_travel(&mut self) {
-        self.try_lock().expect("Dt locked while resetting travel").reset_travel()
+        let mut dt = self.try_lock().expect("Dt locked while resetting travel");
+        dt.left_side.reset_travel();
+        dt.right_side.reset_travel();
     }
 
     fn get_offset(&self) -> f64 {

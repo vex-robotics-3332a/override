@@ -85,8 +85,10 @@ async fn main(peripherals: Peripherals) {
     );
 
     chassis.init();
+    
 
-    robot.compete().await
+
+    // robot.compete().await
 }
 
 #[cfg(test)]
