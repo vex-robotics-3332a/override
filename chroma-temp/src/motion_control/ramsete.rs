@@ -77,8 +77,8 @@ impl Chassis {
             let left_velocity = dt.to_pct_speed(lv + av * dt.track_width / 2.0);
             let right_velocity = dt.to_pct_speed(lv - av * dt.track_width / 2.0);
 
-            dt.spin_left(left_velocity);
-            dt.spin_right(right_velocity);
+            dt.left_side.spin(left_velocity);
+            dt.right_side.spin(right_velocity);
 
             drop(dt);
 

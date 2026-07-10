@@ -3,7 +3,7 @@ use std::time::Instant;
 use alloc::rc::Rc;
 use vexide::math::Angle;
 use vexide::prelude::*;
-use vexide::smart::motor::BrakeMode;
+use vexide::smart::motor::BrakeMode::{self, Brake};
 use vexide::sync::Mutex;
 use vexide::time::LowResolutionTime;
 use crate::SLEEP_INTERVAL;
@@ -22,11 +22,11 @@ pub struct DriveSide {
     pub velocity_controller: VelocityController,
 
     pub velocity: f64,
-    prev_position: Angle,
-    last_update: f64,
-    clock: Instant,
+    pub brake_mode: BrakeMode,
+    pub voltage_percentage: f64,
 
-    pub voltage_percentage: f64
+    prev_position: Angle,
+    last_update: f64
 }
 
 impl DriveSide {
@@ -50,9 +50,9 @@ impl DriveSide {
                 velo_controller_ff
             ),
             velocity: 0.0,
+            brake_mode: BrakeMode::Coast,
             prev_position: Angle::ZERO,
             last_update: 0.0,
-            clock: Instant::now(),
             voltage_percentage: 0.0 
         }
     }
@@ -82,6 +82,12 @@ impl DriveSide {
             motor.set_voltage(v).ok();
         }
         self.voltage_percentage = v / 12.0 * 100.0;
+    }
+
+    pub fn stop(&mut self) {
+        for motor in &mut self.motors {
+            motor.brake(self.brake_mode).ok();
+        }
     }
 
     fn get_travel(&self) -> f64 {
@@ -141,20 +147,9 @@ impl Drivetrain {
         ins / max * 100.0
     }
 
-    pub fn spin_left(&mut self, pct: f64) {
-        self.left_side.spin(pct);
-    }
-
-    pub fn spin_right(&mut self, pct: f64) {
-        self.right_side.spin(pct);
-    }
-
-    pub fn spin_left_v(&mut self, v: f64) {
-        self.left_side.spin_v(v);
-    }
-
-    pub fn spin_right_v(&mut self, v: f64) {
-        self.right_side.spin_v(v);
+    pub fn set_brake_mode(&mut self, brake_mode: BrakeMode) {
+        self.left_side.brake_mode = brake_mode;
+        self.right_side.brake_mode = brake_mode;
     }
 
     pub fn tick_vel(&mut self) {

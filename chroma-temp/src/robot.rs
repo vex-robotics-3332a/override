@@ -26,8 +26,8 @@ impl Robot {
             let angular_power = right_stick.x() * 12.0;
 
             let mut dt = self.drivetrain.try_lock().expect("Dt locked while op_control");
-            dt.spin_left_v(linear_power + angular_power);
-            dt.spin_right_v(linear_power - angular_power);
+            dt.left_side.spin_v(linear_power + angular_power);
+            dt.right_side.spin_v(linear_power - angular_power);
         }
     }
 }
