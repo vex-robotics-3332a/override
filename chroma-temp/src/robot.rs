@@ -16,6 +16,7 @@ impl Robot {
     }
 
     pub fn op_control(&mut self) {
+        // WE NEED REFACTORING HERE (take chassis isntead of dt)
         if let Ok(state) = self.controller.state() {
             let left_stick = state.left_stick;
             let right_stick = state.right_stick;

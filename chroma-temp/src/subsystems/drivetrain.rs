@@ -1,11 +1,11 @@
 use std::f64::consts::PI;
-use std::time::Instant;
 use alloc::rc::Rc;
 use vexide::math::Angle;
 use vexide::prelude::*;
 use vexide::smart::motor::BrakeMode::{self, Brake};
 use vexide::sync::Mutex;
 use vexide::time::LowResolutionTime;
+use std::fs::write;
 use crate::SLEEP_INTERVAL;
 use crate::localization::odometry::Encoder;
 
@@ -22,11 +22,13 @@ pub struct DriveSide {
     pub velocity_controller: VelocityController,
 
     pub velocity: f64,
+    pub raw_vel: f64,
     pub brake_mode: BrakeMode,
     pub voltage_percentage: f64,
+    pub ema_tau: f64,
 
     prev_position: Angle,
-    last_update: f64
+    prev_stamp: LowResolutionTime,
 }
 
 impl DriveSide {
@@ -36,7 +38,8 @@ impl DriveSide {
         ratio: f64, 
         priority: usize,
         velo_controller_kp: f64,
-        velo_controller_ff: f64
+        velo_controller_ff: f64,
+        ema_tau: f64
     ) -> Self {
         let gearset = motors[priority].gearset().unwrap_or(Gearset::Blue);
         Self {
@@ -50,26 +53,69 @@ impl DriveSide {
                 velo_controller_ff
             ),
             velocity: 0.0,
+            raw_vel: 0.0,
             brake_mode: BrakeMode::Coast,
             prev_position: Angle::ZERO,
-            last_update: 0.0,
-            voltage_percentage: 0.0 
+            prev_stamp: LowResolutionTime::EPOCH,
+            voltage_percentage: 0.0,
+            ema_tau
         }
     }
 
+    // pub fn tick_vel(&mut self) {
+    //     let mut velofile = File::options()
+    //         .create(true) // Create file if it doesn't exist
+    //         .append(true) // Enable append mode
+    //         .open("velocity.txt").unwrap();
+
+            
+    //     let max_rpm = self.velocity_controller.gearset.max_rpm();
+    //     let motor = &self.motors[self.priority];
+    //     let now = motor.timestamp().unwrap_or(LowResolutionTime::now()).elapsed().as_secs_f64() / 60.0; 
+    //     let dt_min = now - self.last_update;
+    //     let current = self.motors[self.priority].position().unwrap_or(Angle::ZERO);
+    //     if dt_min > 0.0 {
+    //         let rpm_velocity = (current - self.prev_position).as_turns() / 0.000166667;
+    //         self.velocity = rpm_velocity / max_rpm * 100.0
+    //         //0.000166667 mins -> 10ms
+    //     }
+    //     writeln!(velofile, "{}", self.velocity).ok();
+    //     self.prev_position = current;
+    //     self.last_update = now;
+    // }
     pub fn tick_vel(&mut self) {
         let max_rpm = self.velocity_controller.gearset.max_rpm();
         let motor = &self.motors[self.priority];
-        let now = motor.timestamp().unwrap_or(LowResolutionTime::now()).elapsed().as_secs_f64() / 60.0; 
-        let dt_min = now - self.last_update;
-        let current = self.motors[self.priority].position().unwrap_or(Angle::ZERO);
-        if dt_min > 0.0 {
-            let rpm_velocity = (current - self.prev_position).as_turns() / 0.000166667;
-            self.velocity = rpm_velocity / max_rpm * 100.0
-            //0.000166667 mins -> 10ms
+
+        // The motor only refreshes position on its own ~10ms packet cadence, so
+        // differentiate against the motor's own timestamp. This keeps Δposition
+        // and Δt on the same clock and avoids aliasing against our sample loop.
+        let Ok(stamp) = motor.timestamp() else { return };
+        let current_position = motor.position().unwrap_or(Angle::ZERO);
+
+        // Seed on the first packet so we don't divide a full accumulated
+        // position by a huge Δt.
+        if self.prev_stamp == LowResolutionTime::EPOCH {
+            self.prev_stamp = stamp;
+            self.prev_position = current_position;
+            return;
         }
-        self.prev_position = current;
-        self.last_update = now;
+
+        let dt = stamp - self.prev_stamp;
+        if dt.is_zero() {
+            return; // no new packet since last tick, keep previous velocity
+        }
+        let rpm_velocity = (current_position - self.prev_position).as_turns() / (dt.as_secs_f64() / 60.0);
+        let raw = rpm_velocity / max_rpm * 100.0;
+
+        let alpha = 1.0 - (-dt.as_secs_f64() / self.ema_tau).exp();
+        self.velocity += alpha * (raw - self.velocity);
+
+        //TEMPORARY, FOR TUNING EMA
+        self.raw_vel = raw;
+
+        self.prev_position = current_position;
+        self.prev_stamp = stamp;
     }
 
     pub fn spin(&mut self, pct: f64) {
@@ -113,6 +159,7 @@ impl VelocityController {
     }
 
     pub fn get_power(&self, pct: f64, vel: f64) -> f64 {
+
         let error_v = (pct - vel) / 100.0 * 12.0;
 
         pct / 100.0 * 12.0 * self.ff + error_v * self.kp
@@ -143,7 +190,7 @@ impl Drivetrain {
 
     pub fn to_pct_speed(&self, ins: f64) -> f64 {
         // in/s speed
-        let max = self.left_side.wheel_diameter * PI * self.left_side.velocity_controller.gearset.max_rpm() / 60.0;
+        let max = self.left_side.wheel_diameter * PI * self.left_side.velocity_controller.gearset.max_rpm() * self.left_side.ratio / 60.0;
         ins / max * 100.0
     }
 
@@ -152,9 +199,19 @@ impl Drivetrain {
         self.right_side.brake_mode = brake_mode;
     }
 
+    pub fn stop(&mut self) {
+        self.left_side.stop();
+        self.right_side.stop();
+    }
+
     pub fn tick_vel(&mut self) {
         self.left_side.tick_vel();
         self.right_side.tick_vel();
+    }
+
+    pub fn desaturate(&self, left_pct: f64, right_pct: f64) -> (f64, f64) {
+        let scale = left_pct.abs().max(right_pct.abs()).max(100.0) / 100.0;
+        (left_pct / scale, right_pct / scale)
     }
 
     pub async fn run_vel_ticking(dt: Rc<Mutex<Drivetrain>>) {

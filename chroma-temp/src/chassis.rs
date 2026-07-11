@@ -1,4 +1,4 @@
-use vexide::sync::Mutex;
+use vexide::{smart::motor::BrakeMode, sync::Mutex};
 use alloc::rc::Rc;
 use vexide::prelude::*;
 use crate::{localization::{self, localization::Localization}, subsystems::drivetrain::Drivetrain};
@@ -20,12 +20,17 @@ impl Chassis {
     }
 
     pub fn init(&mut self) {
-        let localization = self.localization.take().expect("No localization object!");
+        let localization = self.localization.take().expect("No localization object/Localization prematurely moved!");
         spawn(localization.run()).detach();
         spawn(Drivetrain::run_vel_ticking(Rc::clone(&self.drivetrain))).detach();
     }
 
     pub fn get_pose(&self) -> Pose {
         *self.pose.try_lock().expect("Pose unexpectedly locked while reading!")
+    }
+
+    pub fn set_brake_mode(&mut self, brake_mode: BrakeMode) {
+        let mut dt = self.drivetrain.try_lock().expect("Dt locked while setting brake mode!");
+        dt.set_brake_mode(brake_mode);
     }
 }

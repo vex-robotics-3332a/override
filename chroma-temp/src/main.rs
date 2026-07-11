@@ -8,6 +8,7 @@ mod chassis;
 extern crate alloc;
 
 use vexide::{prelude::*, time};
+use vexide::smart::{*, motor::*};
 use vexide::sync::Mutex;
 use alloc::rc::Rc;
 use subsystems::*;
@@ -17,6 +18,7 @@ use motion_control::ramsete::*;
 use helpers::*;
 use std::fs::*;
 use std::io::{Result, Write};
+use std::os::raw;
 use std::time::*;
 
 use crate::chassis::Chassis;
@@ -40,8 +42,9 @@ async fn main(peripherals: Peripherals) {
     let right_motor_c = Motor::new(peripherals.port_19, Gearset::Blue, Direction::Reverse);
 
     // Velo controller values
-    let velo_kp = 1.0;
-    let velo_ff = 0.9;
+    let velo_kp = 3.0;
+    let velo_ff = 1.0;
+    let velo_tau = 0.035;
 
     let left_side = drivetrain::DriveSide::new(
         vec![left_motor_a, left_motor_b, left_motor_c],
@@ -50,6 +53,7 @@ async fn main(peripherals: Peripherals) {
         2,
         velo_kp,
         velo_ff,
+        velo_tau
     );
 
     let right_side = drivetrain::DriveSide::new(
@@ -59,6 +63,7 @@ async fn main(peripherals: Peripherals) {
         2,
         velo_kp,
         velo_ff,
+        velo_tau
     );
 
     let drivetrain = Rc::new(Mutex::new(drivetrain::Drivetrain::new(
@@ -85,10 +90,31 @@ async fn main(peripherals: Peripherals) {
     );
 
     chassis.init();
-    
+    chassis.set_brake_mode(BrakeMode::Brake);
 
+    let mut test_profile = MotionProfile::new("profile1.json");
+    chassis.drive_along(&mut test_profile).await;
+    // let mut ema_file = File::create("ema_vel.txt").unwrap();
+    // let mut raw_file = File::create("raw_vel.txt").unwrap();
+    // writeln!(ema_file, "filtered vel").ok();
+    // writeln!(raw_file, "raw vel").ok();
+    // let clock  = Instant::now();
+    // loop {
+    //     let mut vdt = chassis.drivetrain.try_lock().expect("locked!!");
+    //     vdt.left_side.spin_v(12.0);
+    //     vdt.right_side.spin_v(12.0);
+    //     writeln!(ema_file, "{}", (vdt.left_side.velocity + vdt.right_side.velocity) / 2.0).ok();
+    //     writeln!(raw_file, "{}", (vdt.left_side.raw_vel + vdt.right_side.raw_vel) / 2.0).ok();
+    //     raw_file.flush().ok();
+    //     ema_file.flush().ok();
+    //     drop(vdt);
+    //     if clock.elapsed().as_secs_f64() > 3.0 {
+    //         break;
+    //     }
+    //     sleep(SLEEP_INTERVAL).await;
+    // }
 
-    // robot.compete().await
+    robot.compete().await
 }
 
 #[cfg(test)]
