@@ -38,6 +38,7 @@ impl DriveSide {
         ratio: f64, 
         priority: usize,
         velo_controller_kp: f64,
+        velo_controller_ka: f64,
         velo_controller_ff: f64,
         ema_tau: f64
     ) -> Self {
@@ -50,6 +51,7 @@ impl DriveSide {
             velocity_controller: VelocityController::new(
                 gearset,
                 velo_controller_kp,
+                velo_controller_ka,
                 velo_controller_ff
             ),
             velocity: 0.0,
@@ -118,8 +120,8 @@ impl DriveSide {
         self.prev_stamp = stamp;
     }
 
-    pub fn spin(&mut self, pct: f64) {
-        let power = self.velocity_controller.get_power(pct, self.velocity);
+    pub fn spin(&mut self, pct: f64, accel: f64) {
+        let power = self.velocity_controller.get_power(pct, self.velocity, accel);
         self.spin_v(power);
     }
 
@@ -148,21 +150,29 @@ impl DriveSide {
 
 pub struct VelocityController {
     pub gearset: Gearset,
-
+    
     pub kp: f64,
+    pub ka: f64,
     pub ff: f64,
 }
 
 impl VelocityController {
-    pub fn new(gearset: Gearset, kp: f64, ff: f64) -> Self {
-        Self { gearset, kp, ff }
+    pub fn new(gearset: Gearset, kp: f64, ka: f64, ff: f64) -> Self {
+        Self { gearset, kp, ka, ff }
     }
 
-    pub fn get_power(&self, pct: f64, vel: f64) -> f64 {
-
+    /// `pct`   desired velocity, percent of max RPM
+    /// `vel`   measured velocity, percent of max RPM
+    /// `accel` desired acceleration, percent of max RPM per second
+    pub fn get_power(&self, pct: f64, vel: f64, accel: f64) -> f64 {
         let error_v = (pct - vel) / 100.0 * 12.0;
 
-        pct / 100.0 * 12.0 * self.ff + error_v * self.kp
+        // velocity feedforward + acceleration feedforward + proportional trim
+        let power = pct / 100.0 * 12.0 * self.ff
+            + accel * self.ka
+            + error_v * self.kp;
+
+        power.clamp(-12.0, 12.0)
     }
 }
 

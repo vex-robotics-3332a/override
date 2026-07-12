@@ -42,9 +42,10 @@ async fn main(peripherals: Peripherals) {
     let right_motor_c = Motor::new(peripherals.port_19, Gearset::Blue, Direction::Reverse);
 
     // Velo controller values
-    let velo_kp = 3.0;
-    let velo_ff = 1.0;
-    let velo_tau = 0.035;
+    let velo_kp = 0.8;
+    let velo_ka = 0.025;
+    let velo_ff = 0.95;
+    let velo_tau = 0.015;
 
     let left_side = drivetrain::DriveSide::new(
         vec![left_motor_a, left_motor_b, left_motor_c],
@@ -52,6 +53,7 @@ async fn main(peripherals: Peripherals) {
         36.0 / 48.0,
         2,
         velo_kp,
+        velo_ka,
         velo_ff,
         velo_tau
     );
@@ -62,6 +64,7 @@ async fn main(peripherals: Peripherals) {
         36.0 / 48.0,
         2,
         velo_kp,
+        velo_ka,
         velo_ff,
         velo_tau
     );
@@ -89,11 +92,11 @@ async fn main(peripherals: Peripherals) {
         localization
     );
 
-    chassis.init();
+    chassis.init().await;
     chassis.set_brake_mode(BrakeMode::Brake);
 
     let mut test_profile = MotionProfile::new("profile1.json");
-    chassis.drive_along(&mut test_profile).await;
+    chassis.drive_along(&mut test_profile, 0.7, 0.05).await;
     // let mut ema_file = File::create("ema_vel.txt").unwrap();
     // let mut raw_file = File::create("raw_vel.txt").unwrap();
     // writeln!(ema_file, "filtered vel").ok();

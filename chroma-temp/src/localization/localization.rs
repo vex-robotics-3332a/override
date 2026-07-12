@@ -27,7 +27,10 @@ impl Localization {
     pub async fn run(mut self) {
         loop {
             let mut pose = self.pose.try_lock().expect("Pose locked while changing!");
-            let current_heading = self.imu.heading().unwrap_or_default();
+            // The IMU reports heading clockwise-positive; negate it so the whole
+            // localization/control stack is counterclockwise-positive (standard
+            // math convention), matching the motion profile's frame.
+            let current_heading = -self.imu.heading().unwrap_or_default();
             let odometry_update = self.odometry.update(current_heading, self.previous_heading);
 
             *pose = *pose + Pose::new(odometry_update.x, odometry_update.y, Angle::ZERO);
@@ -35,6 +38,7 @@ impl Localization {
 
             self.previous_heading = current_heading;
             drop(pose);
+            
             sleep(Controller::UPDATE_INTERVAL).await;
         }
     }

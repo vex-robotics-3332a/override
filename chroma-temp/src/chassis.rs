@@ -19,8 +19,11 @@ impl Chassis {
         } 
     }
 
-    pub fn init(&mut self) {
-        let localization = self.localization.take().expect("No localization object/Localization prematurely moved!");
+    pub async fn init(&mut self) {
+        let mut localization = self.localization.take().expect("No localization object/Localization prematurely moved!");
+        if let Err(_) = localization.imu.calibrate().await {
+            println!("Calibration failed!");
+        }
         spawn(localization.run()).detach();
         spawn(Drivetrain::run_vel_ticking(Rc::clone(&self.drivetrain))).detach();
     }

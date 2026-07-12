@@ -114,7 +114,7 @@ impl Odometry {
     pub fn update(&mut self, start_theta: Angle, end_theta: Angle) -> CartesianVector {
         let linear_gain = self.linear_encoder.get_travel() - self.previous_linear_travel;
         let horizontal_gain = self.horizontal_encoder.get_travel() - self.previous_horizontal_travel;
-        let heading_gain = angle_difference(start_theta, end_theta);
+        let heading_gain = angle_difference(end_theta, start_theta);
         let chord_angle = average_angle(start_theta, end_theta);
 
         self.previous_linear_travel += linear_gain;
@@ -125,6 +125,6 @@ impl Odometry {
             Self::calculate_chord_length(self.horizontal_encoder.get_offset(), horizontal_gain, heading_gain)
         );
 
-        gain_vector.rotate(chord_angle.as_degrees())
+        gain_vector.rotate(chord_angle)
     }
 }

@@ -4,8 +4,12 @@ use core::ops::{Add, Sub, Mul, Div};
 
 // --- Free functions ---
 
+pub fn interp(v1: f64, v2: f64, scale: f64) -> f64 {
+    v1 * (1.0 - scale) + v2 * scale
+}
+
 pub fn angle_difference(theta_1: Angle, theta_2: Angle) -> Angle {
-    (theta_2 - theta_1).wrapped_half()
+    (theta_1 - theta_2).wrapped_half()
 }
 
 pub fn normalize_to_360(theta: Angle) -> Angle {
@@ -18,7 +22,7 @@ pub fn convert_to_180(theta: Angle) -> Angle {
 
 pub fn average_angle(theta_1: Angle, theta_2: Angle) -> Angle {
     let t1 = normalize_to_360(theta_1);
-    let diff = angle_difference(t1, theta_2);
+    let diff = angle_difference(theta_2, t1);
     normalize_to_360(t1 + diff / 2.0)
 }
 
@@ -57,7 +61,7 @@ impl Pose {
     }
 
     pub fn heading_to(&self, other: &Pose) -> Angle {
-        angle_difference(self.heading, other.heading)
+        angle_difference(other.heading, self.heading)
     }
 
     pub fn distance_to(&self, other: &Pose) -> f64 {
@@ -128,8 +132,8 @@ impl CartesianVector {
         (self.x.powi(2) + self.y.powi(2)).sqrt()
     }
 
-    pub fn rotate(&self, theta: f64) -> Self {
-        let rad = theta.to_radians();
+    pub fn rotate(&self, angle: Angle) -> Self {
+        let rad = angle.as_radians();
         Self::new(
             self.x * rad.cos() - self.y * rad.sin(),
             self.x * rad.sin() + self.y * rad.cos(),
