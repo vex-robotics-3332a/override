@@ -129,12 +129,10 @@ impl Chassis {
         let clock = Instant::now();
 
         //debug
-        let mut desired_v_file = File::create("desired_velocity.txt").expect("put yo sd card in bro");
-        let mut actual_v_file = File::create("actual_velocity.txt").expect("put yo sd card in bro");
-        let mut voltage_file = File::create("voltage.txt").expect("put yo sd card in bro");
-        writeln!(desired_v_file, "timestamp,desired velocity").expect("wtf");
-        writeln!(actual_v_file, "timestamp,actual velocity").expect("wtf");
-        writeln!(voltage_file, "timestamp,voltage").expect("wtf");
+        let mut ct_e_file = File::create("ct_e.txt").expect("put yo sd card in bro");
+        let mut theta_e_file = File::create("theta_e.txt").expect("put yo sd card in bro");
+        writeln!(ct_e_file, "timestamp,cross track error").expect("wtf");
+        writeln!(theta_e_file, "timestamp,heading error").expect("wtf");
 
         profile.start();
         let mut tick = 0;
@@ -151,8 +149,8 @@ impl Chassis {
 
             //Ramsete part, modifies velocities
             let mut global_vector = CartesianVector::new(point.p.0 as f64 - pose.x, point.p.1 as f64 - pose.y);
-            global_vector = global_vector.rotate(-pose.heading);
-            let error_heading = angle_difference(Angle::from_radians(point.p.2 as f64), pose.heading);
+            global_vector = global_vector.rotate(pose.heading * -1.0);
+            let error_heading = angle_difference(pose.heading, Angle::from_radians(point.p.2 as f64));
             
             let error_pose = Pose::new(global_vector.x, global_vector.y, error_heading);
 
@@ -180,8 +178,8 @@ impl Chassis {
             dt.right_side.spin(right_velocity, right_accel);
 
             //debug
-            writeln!(desired_v_file, "{},{}", time, corrected_lv).expect("wtf");
-            // writeln!(actual_v_file, "{},{}", time, (dt.left_side.velocity + dt.right_side.velocity) / 2.0).expect("wtf");
+            writeln!(ct_e_file, "{},{}", time, error_pose.y).expect("wtf");
+            writeln!(theta_e_file, "{},{}", time, error_pose.heading.as_degrees()).expect("wtf");
             // writeln!(voltage_file, "{},{}", time, (dt.left_side.voltage_percentage + dt.right_side.voltage_percentage) / 2.0).expect("wtf");
 
             if profile.has_ended() {
@@ -193,7 +191,7 @@ impl Chassis {
 
             //debug flush
             if tick > 30 {
-                desired_v_file.flush().ok();
+                ct_e_file.flush().ok();
                 // actual_v_file.flush().ok();
                 // voltage_file.flush().ok();
                 tick = 0;

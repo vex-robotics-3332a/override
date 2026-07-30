@@ -1,9 +1,17 @@
+/*
+Todos or something:
+- Telemetry system
+- subsys integration
+- Auto routines selector/system
+ */
+
 mod subsystems;
 mod robot;
 mod localization;
 mod helpers;
 mod motion_control;
 mod chassis;
+mod telemetry;
 
 extern crate alloc;
 
@@ -18,7 +26,6 @@ use motion_control::ramsete::*;
 use helpers::*;
 use std::fs::*;
 use std::io::{Result, Write};
-use std::os::raw;
 use std::time::*;
 
 use crate::chassis::Chassis;
@@ -96,27 +103,7 @@ async fn main(peripherals: Peripherals) {
     chassis.set_brake_mode(BrakeMode::Brake);
 
     let mut test_profile = MotionProfile::new("profile1.json");
-    chassis.drive_along(&mut test_profile, 0.7, 0.05).await;
-    // let mut ema_file = File::create("ema_vel.txt").unwrap();
-    // let mut raw_file = File::create("raw_vel.txt").unwrap();
-    // writeln!(ema_file, "filtered vel").ok();
-    // writeln!(raw_file, "raw vel").ok();
-    // let clock  = Instant::now();
-    // loop {
-    //     let mut vdt = chassis.drivetrain.try_lock().expect("locked!!");
-    //     vdt.left_side.spin_v(12.0);
-    //     vdt.right_side.spin_v(12.0);
-    //     writeln!(ema_file, "{}", (vdt.left_side.velocity + vdt.right_side.velocity) / 2.0).ok();
-    //     writeln!(raw_file, "{}", (vdt.left_side.raw_vel + vdt.right_side.raw_vel) / 2.0).ok();
-    //     raw_file.flush().ok();
-    //     ema_file.flush().ok();
-    //     drop(vdt);
-    //     if clock.elapsed().as_secs_f64() > 3.0 {
-    //         break;
-    //     }
-    //     sleep(SLEEP_INTERVAL).await;
-    // }
-
+    chassis.drive_along(&mut test_profile, 0.8, 0.0013).await;
     robot.compete().await
 }
 
