@@ -1,0 +1,9 @@
+{
+  "robot": {
+    "max_speed": 76.38162268,
+    "max_accel": 100.0,
+    "track_width": 11.5,
+    "length": 15.5,
+    "width": 14.5
+  }
+}
