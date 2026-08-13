@@ -78,6 +78,7 @@ impl Encoder for NullPod {
     }
 }
 
+//boxes cuz generics are ugly
 pub struct Odometry {
     pub linear_encoder: Box<dyn Encoder>,
     pub horizontal_encoder: Box<dyn Encoder>,

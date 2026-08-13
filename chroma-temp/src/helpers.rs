@@ -1,6 +1,12 @@
 use vexide::math::Angle;
-use core::fmt;
+use core::fmt::{self, Write as FmtWrite};
 use core::ops::{Add, Sub, Mul, Div};
+
+fn format_to_string(args: fmt::Arguments<'_>) -> String {
+    let mut s = String::new();
+    FmtWrite::write_fmt(&mut s, args).expect("writing to String cannot fail");
+    s
+}
 
 // --- Free functions ---
 
@@ -69,10 +75,12 @@ impl Pose {
     }
 
     pub fn get_rounded(&self) -> String {
-        format!(
+        format_to_string(format_args!(
             "X: {:.2}, Y: {:.2}, Heading: {:.2}",
-            self.x, self.y, self.heading.as_degrees()
-        )
+            self.x,
+            self.y,
+            self.heading.as_degrees()
+        ))
     }
 }
 
@@ -99,13 +107,23 @@ impl Div<f64> for Pose {
 
 impl fmt::Display for Pose {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "X: {}, Y: {}, Heading: {}°", self.x, self.y, self.heading.as_degrees())
+        f.write_fmt(format_args!(
+            "X: {}, Y: {}, Heading: {}°",
+            self.x,
+            self.y,
+            self.heading.as_degrees()
+        ))
     }
 }
 
 impl fmt::Debug for Pose {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "X: {}, Y: {}, Heading: {}°", self.x, self.y, self.heading.as_degrees())
+        f.write_fmt(format_args!(
+            "X: {}, Y: {}, Heading: {}°",
+            self.x,
+            self.y,
+            self.heading.as_degrees()
+        ))
     }
 }
 
@@ -175,13 +193,21 @@ impl Div for CartesianVector {
 
 impl fmt::Display for CartesianVector {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "CartesianVector(x={:.2}, y={:.2})", self.x, self.y)
+        f.write_fmt(format_args!(
+            "CartesianVector(x={:.2}, y={:.2})",
+            self.x,
+            self.y
+        ))
     }
 }
 
 impl fmt::Debug for CartesianVector {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "CartesianVector(x={}, y={})", self.x, self.y)
+        f.write_fmt(format_args!(
+            "CartesianVector(x={}, y={})",
+            self.x,
+            self.y
+        ))
     }
 }
 
@@ -240,21 +266,21 @@ impl Div for PolarVector {
 
 impl fmt::Display for PolarVector {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
+        f.write_fmt(format_args!(
             "PolarVector(magnitude={:.2}, theta={:.2})",
-            self.magnitude, self.theta
-        )
+            self.magnitude,
+            self.theta
+        ))
     }
 }
 
 impl fmt::Debug for PolarVector {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
+        f.write_fmt(format_args!(
             "PolarVector(magnitude={}, theta={})",
-            self.magnitude, self.theta
-        )
+            self.magnitude,
+            self.theta
+        ))
     }
 }
 

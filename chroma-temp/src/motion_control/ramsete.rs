@@ -1,12 +1,12 @@
 use vexide::math::Angle;
 use vexide::prelude::*;
-use std::{time::Instant, fs::*};
-use std::io::{Result, Write};
+use std::{time::Instant, fs::read_to_string};
+use std::io::Write;
 use serde::Deserialize;
 use crate::helpers::*;
-use crate::subsystems::drivetrain::Drivetrain;
 use crate::chassis::Chassis;
-use crate::SLEEP_INTERVAL;
+use crate::telemetry::TelemetryFile;
+use crate::{telemetry, SLEEP_INTERVAL};
 
 /// Unnormalized sinc: sin(x)/x, with the removable singularity at x = 0
 /// handled via its limit (sinc(0) = 1).
@@ -45,6 +45,11 @@ pub struct Point {
     pub la: f32,
     #[serde(skip)]
     pub aa: f32,
+}
+
+pub struct RamseteConfig {
+    pub beta: f64,
+    pub zeta: f64
 }
 
 impl MotionProfile {
@@ -123,19 +128,28 @@ impl MotionProfile {
 }
 
 impl Chassis {
-    pub async fn drive_along(&mut self, profile: &mut MotionProfile, zeta: f64, beta: f64) {
+    pub async fn drive_along(&mut self, profile: &mut MotionProfile) {
         // running fully raw (no correction) to see if the profile is roughly correct
 
         let clock = Instant::now();
 
-        //debug
-        let mut ct_e_file = File::create("ct_e.txt").expect("put yo sd card in bro");
-        let mut theta_e_file = File::create("theta_e.txt").expect("put yo sd card in bro");
-        writeln!(ct_e_file, "timestamp,cross track error").expect("wtf");
-        writeln!(theta_e_file, "timestamp,heading error").expect("wtf");
+        let ct_e = TelemetryFile::new_csv(
+            "ct_e.txt",
+            &["timestamp", "cross track error"],
+            TelemetryFile::DEFAULT_BUFFER_SIZE,
+            TelemetryFile::DEFAULT_ITER_TIMEOUT,
+        );
+        let theta_e = TelemetryFile::new_csv(
+            "theta_e.txt",
+            &["timestamp", "heading error"],
+            TelemetryFile::DEFAULT_BUFFER_SIZE,
+            TelemetryFile::DEFAULT_ITER_TIMEOUT,
+        );
+
+        let beta = self.ramsete_config.beta;
+        let zeta = self.ramsete_config.zeta;
 
         profile.start();
-        let mut tick = 0;
         loop {
             let time = clock.elapsed().as_millis();
             let mut dt = self.drivetrain.try_lock().expect("Dt lock failed while driving");
@@ -177,10 +191,8 @@ impl Chassis {
             dt.left_side.spin(left_velocity, left_accel);
             dt.right_side.spin(right_velocity, right_accel);
 
-            //debug
-            writeln!(ct_e_file, "{},{}", time, error_pose.y).expect("wtf");
-            writeln!(theta_e_file, "{},{}", time, error_pose.heading.as_degrees()).expect("wtf");
-            // writeln!(voltage_file, "{},{}", time, (dt.left_side.voltage_percentage + dt.right_side.voltage_percentage) / 2.0).expect("wtf");
+            telemetry!(ct_e, time, error_pose.y);
+            telemetry!(theta_e, time, error_pose.heading.as_degrees());
 
             if profile.has_ended() {
                 break;
@@ -189,16 +201,6 @@ impl Chassis {
             drop(dt);
             drop(pose);
 
-            //debug flush
-            if tick > 30 {
-                ct_e_file.flush().ok();
-                // actual_v_file.flush().ok();
-                // voltage_file.flush().ok();
-                tick = 0;
-            }
-
-            
-            tick += 1;
             sleep(SLEEP_INTERVAL).await;
         }
         let mut dt = self.drivetrain.try_lock().expect("Dt lock failed while driving");
@@ -214,12 +216,10 @@ impl Chassis {
 
 
 
-
-
-
 // testing time mapping
+#[allow(dead_code)]
 pub async fn test_time_mapping() {
-    let mut output = File::create("profile_testing_file.txt").unwrap();
+    let mut output = std::fs::File::create("profile_testing_file.txt").unwrap();
     let profile_string = read_to_string("profile1.json").unwrap();
     let mut  motion_profile: MotionProfile = serde_json::from_str(&profile_string).unwrap();
     let own_timer = Instant::now();
@@ -232,8 +232,9 @@ pub async fn test_time_mapping() {
     }
 }
 
+#[allow(dead_code)]
 pub async fn test_velocity_grepping() {
-    let mut output = File::create("profile_testing_file.txt").unwrap();
+    let mut output = std::fs::File::create("profile_testing_file.txt").unwrap();
     let profile_string = read_to_string("vcTuning1.json").unwrap();
     let motion_profile: MotionProfile = serde_json::from_str(&profile_string).unwrap();
 

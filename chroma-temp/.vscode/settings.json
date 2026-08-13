@@ -1,0 +1,5 @@
+{
+  "rust-analyzer.cargo.target": "armv7a-vex-v5",
+  "rust-analyzer.cargo.buildScripts.enable": true,
+  "rust-analyzer.check.allTargets": false
+}

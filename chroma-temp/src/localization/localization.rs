@@ -2,7 +2,7 @@ use vexide::{prelude::*, startup::banner::print};
 use alloc::rc::Rc;
 use vexide::sync::Mutex;
 use vexide::math::Angle;
-use super::odometry::{Odometry, Encoder};
+use super::odometry::{Odometry};
 use crate::helpers::Pose;
 
 pub struct Localization {

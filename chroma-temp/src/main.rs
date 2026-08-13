@@ -6,6 +6,7 @@ Todos or something:
  */
 
 mod subsystems;
+mod autos;
 mod robot;
 mod localization;
 mod helpers;
@@ -36,6 +37,8 @@ const SLEEP_INTERVAL: Duration = Duration::new(0.0 as u64, 10000000);
 
 // Dear future self...
 // I'm sorry.
+
+// FUCK YOU PAST SELF
 
 #[vexide::main]
 async fn main(peripherals: Peripherals) {
@@ -92,19 +95,22 @@ async fn main(peripherals: Peripherals) {
     /* misc */
     let controller = peripherals.primary_controller;
     let robot = Robot::new(Rc::clone(&drivetrain), controller);
+    
+    let ramsete_config = RamseteConfig { beta: 0.0013, zeta: 0.8 };
 
     /* Task spawning */
     let mut chassis = Chassis::new(
         Rc::clone(&drivetrain),
-        localization
+        localization,
+        ramsete_config
     );
 
     chassis.init().await;
     chassis.set_brake_mode(BrakeMode::Brake);
 
-    let mut test_profile = MotionProfile::new("profile1.json");
-    chassis.drive_along(&mut test_profile, 0.8, 0.0013).await;
-    robot.compete().await
+    autos::test::run(&mut chassis).await;
+
+    robot.compete().await;
 }
 
 #[cfg(test)]
