@@ -162,12 +162,18 @@ impl Chassis {
             let aa = point.aa as f64;
 
             //Ramsete part, modifies velocities
-            let mut global_vector = CartesianVector::new(point.p.0 as f64 - pose.x, point.p.1 as f64 - pose.y);
-            global_vector = global_vector.rotate(pose.heading * -1.0);
+            //Represent error as a vector
+            let global_vector = CartesianVector::new(point.p.0 as f64 - pose.x, point.p.1 as f64 - pose.y);
+
+            //rotate into local error
+            let local_vector = global_vector.rotate(pose.heading * -1.0);
+            //heading is seperate because we cannot represent this via the local vector
             let error_heading = angle_difference(pose.heading, Angle::from_radians(point.p.2 as f64));
             
-            let error_pose = Pose::new(global_vector.x, global_vector.y, error_heading);
-
+            //holds the error as a pose; robot_pose + error_pose = desired_pose
+            let error_pose = Pose::new(local_vector.x, local_vector.y, error_heading);
+            
+            //correction equations
             let k = 2.0 * zeta * (av.powi(2) + beta * lv.powi(2)).sqrt();
             let e3 = error_pose.heading.as_radians();
 
@@ -176,7 +182,6 @@ impl Chassis {
 
             // Differential-drive kinematics: convert body-frame linear/angular
             // velocity (and acceleration) into per-wheel values. av * track_width/2
-            // has units of in/s (rad is dimensionless), matching lv.
             let mut left_velocity = dt.to_pct_speed(corrected_lv - corrected_av * dt.track_width / 2.0);
             let mut right_velocity = dt.to_pct_speed(corrected_lv + corrected_av * dt.track_width / 2.0);
 
