@@ -1,3 +1,6 @@
+import sys
+from pathlib import Path
+
 import flet as ft
 
 from actions import CanvasCurve, RobotAction
@@ -5,7 +8,11 @@ from render import FieldCanvas
 from sidebar import Sidebar
 from theme import apply_page_theme
 
-FIELD_IMAGE = "override_match.png"
+_parent = Path(__file__).resolve().parent.parent
+if str(_parent) not in sys.path:
+    sys.path.insert(0, str(_parent))
+
+from settings import field_image_for_background, get_field_background
 
 
 def main(page: ft.Page):
@@ -32,6 +39,20 @@ def main(page: ft.Page):
     def on_playback_pose(pose):
         field.set_playback_pose(pose)
 
+    def on_visualize_frame(frame):
+        if frame is None:
+            field.clear_visualize()
+            return
+        field.set_visualize(
+            path=frame.get("path") or [],
+            desired=frame.get("desired"),
+            actual=frame.get("actual"),
+            active=True,
+        )
+
+    def on_field_background_change(key: str):
+        field.set_field_image(field_image_for_background(key))
+
     def on_canvas_action_select(target: RobotAction | CanvasCurve):
         action_list = sidebar.action_list
         if isinstance(target, CanvasCurve):
@@ -45,8 +66,22 @@ def main(page: ft.Page):
     def on_canvas_point_drag_end(target):
         sidebar.action_list.on_canvas_point_drag_end(target)
 
+    def on_keyboard(e: ft.KeyboardEvent):
+        if not (e.ctrl or e.meta):
+            return
+        key = (e.key or "").upper()
+        action_list = sidebar.action_list
+        if key == "S":
+            sidebar.save_selected_routine()
+        elif key == "Z" and e.shift:
+            action_list.redo()
+        elif key == "Z":
+            action_list.undo()
+        elif key == "Y":
+            action_list.redo()
+
     field = FieldCanvas(
-        FIELD_IMAGE,
+        field_image_for_background(get_field_background()),
         on_click=lambda x, y: print(f"tapped field: ({x:.1f}, {y:.1f}) in"),
         on_motion_select=on_canvas_action_select,
         on_point_drag=on_canvas_point_drag,
@@ -55,7 +90,10 @@ def main(page: ft.Page):
 
     sidebar = Sidebar(page, on_scene_change=refresh_scene)
     sidebar.on_playback_pose = on_playback_pose
+    sidebar.on_visualize_frame = on_visualize_frame
+    sidebar.on_field_background_change = on_field_background_change
 
+    page.on_keyboard_event = on_keyboard
     page.add(
         ft.Row(
             expand=True,

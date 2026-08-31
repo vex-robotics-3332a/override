@@ -22,6 +22,11 @@ POINT_COLORS = (
 )
 POINT_RADIUS_PX = 8.0
 
+# Visualize overlay colors
+DESIRED_ROBOT_COLOR = "#3B82F6"  # blue — planned / routine pose
+ACTUAL_ROBOT_COLOR = "#F97316"  # orange — captured pose
+ACTUAL_PATH_COLOR = "#FB923C"
+
 
 def _is_mounted(control) -> bool:
     try:
@@ -54,9 +59,14 @@ class FieldCanvas:
         self._curves: list[tuple[CanvasCurve, bool]] = []
         self._robot_specs: RobotSpecs = get_robot_specs().copy()
         self._playback_pose: tuple[float, float, float] | None = None
+        self._visualize_active = False
+        self._visualize_path: list[tuple[float, float]] = []
+        self._desired_pose: tuple[float, float, float] | None = None
+        self._actual_pose: tuple[float, float, float] | None = None
         self._drag_state: tuple[object, int] | None = None
 
         self.canvas = cv.Canvas(expand=True, on_resize=self._handle_resize)
+        self._field_image = ft.Image(src=field_image, fit=ft.BoxFit.CONTAIN, expand=True)
 
         gesture = ft.GestureDetector(
             expand=True,
@@ -73,11 +83,19 @@ class FieldCanvas:
             content=ft.Stack(
                 expand=True,
                 controls=[
-                    ft.Image(src=field_image, fit=ft.BoxFit.CONTAIN, expand=True),
+                    self._field_image,
                     gesture,
                 ],
             ),
         )
+
+    def set_field_image(self, field_image: str):
+        """Swap the field background asset (e.g. match vs skills)."""
+        if self._field_image.src == field_image:
+            return
+        self._field_image.src = field_image
+        if _is_mounted(self._field_image):
+            self._field_image.update()
 
     # --- coordinate conversion ------------------------------------------
 
@@ -114,8 +132,34 @@ class FieldCanvas:
 
     def set_playback_pose(self, pose: tuple[float, float, float] | None):
         """Override the robot body pose during simulate scrubbing/playback."""
+        if self._visualize_active:
+            return
         self._playback_pose = pose
         self._render()
+
+    def set_visualize(
+        self,
+        *,
+        path: list[tuple[float, float]] | None = None,
+        desired: tuple[float, float, float] | None = None,
+        actual: tuple[float, float, float] | None = None,
+        active: bool = True,
+    ):
+        """Show desired (blue) + actual (orange) robots and the captured path."""
+        self._visualize_active = bool(active)
+        if not active:
+            self._visualize_path = []
+            self._desired_pose = None
+            self._actual_pose = None
+        else:
+            self._visualize_path = list(path or [])
+            self._desired_pose = desired
+            self._actual_pose = actual
+            self._playback_pose = None
+        self._render()
+
+    def clear_visualize(self):
+        self.set_visualize(active=False)
 
     def find_curve_at(self, field_x: float, field_y: float):
         best = None
@@ -195,21 +239,71 @@ class FieldCanvas:
         for canvas_curve, selected in self._curves:
             shapes.extend(self._curve_shapes(canvas_curve, selected))
 
-        robot_pose = self._playback_pose if self._playback_pose is not None else self._start_pose
-        if robot_pose is not None:
-            shapes.extend(self._robot_body_shapes(robot_pose))
-            shapes.extend(
-                self._tracking_point_shapes(
-                    robot_pose,
-                    selected=self._playback_pose is not None or self._start_selected,
+        if self._visualize_active:
+            shapes.extend(self._visualize_path_shapes())
+            if self._desired_pose is not None:
+                shapes.extend(
+                    self._robot_body_shapes(self._desired_pose, color=DESIRED_ROBOT_COLOR)
                 )
-            )
+                shapes.extend(
+                    self._tracking_point_shapes(
+                        self._desired_pose,
+                        selected=True,
+                        color=DESIRED_ROBOT_COLOR,
+                    )
+                )
+            if self._actual_pose is not None:
+                shapes.extend(
+                    self._robot_body_shapes(self._actual_pose, color=ACTUAL_ROBOT_COLOR)
+                )
+                shapes.extend(
+                    self._tracking_point_shapes(
+                        self._actual_pose,
+                        selected=True,
+                        color=ACTUAL_ROBOT_COLOR,
+                    )
+                )
+        else:
+            robot_pose = self._playback_pose if self._playback_pose is not None else self._start_pose
+            if robot_pose is not None:
+                shapes.extend(self._robot_body_shapes(robot_pose))
+                shapes.extend(
+                    self._tracking_point_shapes(
+                        robot_pose,
+                        selected=self._playback_pose is not None or self._start_selected,
+                    )
+                )
 
         self.canvas.shapes = shapes
         if _is_mounted(self.canvas):
             self.canvas.update()
 
-    def _robot_body_shapes(self, pose: tuple[float, float, float]):
+    def _visualize_path_shapes(self):
+        if len(self._visualize_path) < 2 or self._size <= 0:
+            return []
+        elements = []
+        first = True
+        for x, y in self._visualize_path:
+            sx, sy = self.field_to_screen(x, y)
+            if first:
+                elements.append(cv.Path.MoveTo(sx, sy))
+                first = False
+            else:
+                elements.append(cv.Path.LineTo(sx, sy))
+        return [
+            cv.Path(
+                elements,
+                paint=ft.Paint(
+                    stroke_width=3,
+                    style=ft.PaintingStyle.STROKE,
+                    color=ft.Colors.with_opacity(0.85, ACTUAL_PATH_COLOR),
+                    stroke_join=ft.StrokeJoin.ROUND,
+                    stroke_cap=ft.StrokeCap.ROUND,
+                ),
+            )
+        ]
+
+    def _robot_body_shapes(self, pose: tuple[float, float, float], *, color: str | None = None):
         """Translucent body rectangle from length/width, centered on the tracking point."""
         x, y, heading = pose
         length = max(0.0, self._robot_specs.length)
@@ -217,6 +311,7 @@ class FieldCanvas:
         if length <= 0 or width <= 0 or self._size <= 0:
             return []
 
+        body = color or ft.Colors.GREEN_ACCENT_400
         h = radians(heading)
         fx, fy = cos(h), sin(h)
         rx, ry = -sin(h), cos(h)
@@ -234,8 +329,8 @@ class FieldCanvas:
             cv.Path.LineTo(*corners[3]),
             cv.Path.Close(),
         ]
-        fill = ft.Colors.with_opacity(0.22, ft.Colors.GREEN_ACCENT_400)
-        stroke = ft.Colors.with_opacity(0.75, ft.Colors.GREEN_ACCENT_200)
+        fill = ft.Colors.with_opacity(0.22, body)
+        stroke = ft.Colors.with_opacity(0.85, body)
         return [
             cv.Path(
                 elements,
@@ -251,16 +346,22 @@ class FieldCanvas:
             ),
         ]
 
-    def _tracking_point_shapes(self, pose: tuple[float, float, float], *, selected: bool):
+    def _tracking_point_shapes(
+        self,
+        pose: tuple[float, float, float],
+        *,
+        selected: bool,
+        color: str | None = None,
+    ):
         x, y, heading = pose
         cx, cy = self.field_to_screen(x, y)
-        color = ft.Colors.GREEN_ACCENT_400
+        point_color = color or ft.Colors.GREEN_ACCENT_400
         radius = POINT_RADIUS_PX if selected else 5.0
 
         shapes = [
             cv.Circle(
                 cx, cy, radius,
-                paint=ft.Paint(style=ft.PaintingStyle.FILL, color=color),
+                paint=ft.Paint(style=ft.PaintingStyle.FILL, color=point_color),
             ),
         ]
         if selected:
@@ -283,7 +384,7 @@ class FieldCanvas:
                 paint=ft.Paint(
                     stroke_width=3,
                     style=ft.PaintingStyle.STROKE,
-                    color=color,
+                    color=point_color,
                 ),
             )
         )

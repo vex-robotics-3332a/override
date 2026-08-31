@@ -1,4 +1,4 @@
-from math import atan2, hypot, floor, log10, pi, sin, cos
+from math import atan2, hypot, floor, log, log10, pi, sin, cos
 import json
 import os
 
@@ -16,16 +16,28 @@ def wrap_angle(a):
 
 
 class Robot:
-    def __init__(self, max_speed, max_accel, track_width):
-        self.max_speed = max_speed #in/s
-        self.track_width = track_width #in
-        self.max_acceleration = max_accel #in/s^2
+    def __init__(self, max_speed, max_accel, track_width, accel_curvature_gain: float = 1.0):
+        self.max_speed = max_speed  # in/s — free speed / first-order asymptote
+        self.track_width = track_width  # in
+        self.max_acceleration = max_accel  # in/s^2 — stall accel a0
+        self.accel_curvature_gain = float(accel_curvature_gain)
+
+    @property
+    def tau(self) -> float:
+        """First-order time constant τ = v_max / a0 (seconds)."""
+        a0 = max(float(self.max_acceleration), 1e-9)
+        return float(self.max_speed) / a0
 
 
 def robot_from_settings() -> Robot:
     """Build a Robot from Profiler/settings.json."""
     specs = get_robot_settings()
-    return Robot(specs["max_speed"], specs["max_accel"], specs["track_width"])
+    return Robot(
+        specs["max_speed"],
+        specs["max_accel"],
+        specs["track_width"],
+        specs.get("accel_curvature_gain", 1.0),
+    )
 
 
 class CubicBezier:
@@ -111,9 +123,108 @@ class MotionProfile:
     def get_max_angular(self, curvature):
         return self.robot.max_speed/(abs(curvature) * self.robot.track_width/2 + 1)
 
+    def accel_cap(self, curvature: float) -> float:
+        """Stall accel a0 scaled by curvature: a0 / (1 + gain*|κ|*track/2)."""
+        gain = max(0.0, float(getattr(self.robot, "accel_curvature_gain", 0.0)))
+        return self.robot.max_acceleration / (
+            1.0 + gain * abs(curvature) * self.robot.track_width / 2.0
+        )
+
+    def tau_for_accel(self, a0: float) -> float:
+        """τ = v_max / a0 for the local (curvature-scaled) stall accel."""
+        return self.robot.max_speed / max(float(a0), 1e-9)
+
     def _speed_cap(self, max_speed_pct: float) -> float:
         return self.robot.max_speed * max_speed_pct / 100
-    
+
+    def _accel_distance(self, v0: float, v1: float, a0: float) -> float:
+        """Path length to accelerate v0→v1 under a = a0·(1 − v/v_max), v1 ≥ v0."""
+        V = float(self.robot.max_speed)
+        if v1 <= v0 or V <= 1e-12:
+            return 0.0
+        if a0 <= 1e-12:
+            return float("inf")
+        tau = self.tau_for_accel(a0)
+        eps = 1e-9 * V
+        v0c = min(max(v0, 0.0), V - eps)
+        v1c = min(max(v1, 0.0), V - eps)
+        if v1c <= v0c:
+            return 0.0
+        return tau * (V * log((V - v0c) / (V - v1c)) - (v1c - v0c))
+
+    def _decel_distance(self, v0: float, v1: float, a0: float) -> float:
+        """Path length to brake v0→v1 under a = −a0·(1 + v/v_max), v1 ≤ v0."""
+        V = float(self.robot.max_speed)
+        if v0 <= v1 or V <= 1e-12:
+            return 0.0
+        if a0 <= 1e-12:
+            return float("inf")
+        tau = self.tau_for_accel(a0)
+        v0c = max(v0, 0.0)
+        v1c = max(v1, 0.0)
+        if v0c <= v1c:
+            return 0.0
+        # Δs = τ[(v0−v1) − V ln((V+v0)/(V+v1))]
+        return tau * ((v0c - v1c) - V * log((V + v0c) / (V + v1c)))
+
+    def max_speed_after_distance(self, v0: float, ds: float, a0: float) -> float:
+        """Max speed reachable after traveling ds while accelerating (first-order)."""
+        V = float(self.robot.max_speed)
+        v0 = min(max(float(v0), 0.0), V)
+        if ds <= 1e-12 or a0 <= 1e-12:
+            return v0
+        v_hi = V * (1.0 - 1e-9)
+        if self._accel_distance(v0, v_hi, a0) <= ds:
+            return V
+        lo, hi = v0, v_hi
+        for _ in range(48):
+            mid = 0.5 * (lo + hi)
+            if self._accel_distance(v0, mid, a0) <= ds:
+                lo = mid
+            else:
+                hi = mid
+        return lo
+
+    def max_speed_before_distance(self, v1: float, ds: float, a0: float) -> float:
+        """Max speed allowed ds before reaching v1 while braking (first-order reverse)."""
+        V = float(self.robot.max_speed)
+        v1 = min(max(float(v1), 0.0), V)
+        if ds <= 1e-12 or a0 <= 1e-12:
+            return v1
+        # As ds→∞, approachable from arbitrary high speed; cap search at a generous bound.
+        v_hi = max(V * 4.0, v1 + 1.0)
+        if self._decel_distance(v_hi, v1, a0) <= ds:
+            # Still not enough braking distance from v_hi — allow up to v_hi
+            # (speed caps will clip). Binary-search upward until distance fits.
+            while self._decel_distance(v_hi, v1, a0) <= ds and v_hi < V * 20:
+                v_hi *= 1.5
+        lo, hi = v1, v_hi
+        for _ in range(48):
+            mid = 0.5 * (lo + hi)
+            if self._decel_distance(mid, v1, a0) <= ds:
+                lo = mid
+            else:
+                hi = mid
+        return lo
+
+    def _travel_time(self, v0: float, v1: float, ds: float, a0: float = 0.0) -> float:
+        """Seconds to traverse path length ds at the profiled endpoint speeds.
+
+        Always uses path length / average speed. Closed-form accel/brake times are
+        wrong here: when curvature (not dynamics) changes speed, Δv is small but
+        Δs is still ~resolution, and brake formulas collapse dt→0 so many samples
+        share one timestamp (playback teleports / jumps).
+        """
+        if ds <= 1e-12:
+            return 0.0
+        v_avg = 0.5 * (abs(v0) + abs(v1))
+        if v_avg < 1e-9:
+            # Both near rest: fall back to stall accel so the first step isn't infinite.
+            a = max(float(a0), float(self.robot.max_acceleration), 1e-9)
+            # s ≈ 0.5 a t^2  →  t ≈ sqrt(2s/a)
+            return (2.0 * ds / a) ** 0.5
+        return ds / v_avg
+
     def generate_sample_list(self):
         if len(self.profile) > 0: raise Exception("Sample list has already been generated!")
         if not self.curves:
@@ -181,15 +292,22 @@ class MotionProfile:
                 "t": 0,
             })
 
-        previous_speed = 0
+        previous_speed = 0.0
         for i, point in enumerate(self.profile):
             curvature = self.points[i]["curvature"]
             speed_pct = self.points[i].get("max_speed", self.max_speed)
             max_forward_velocity_from_curve = self.get_max_angular(curvature)
-            distance_to_previous_point = 0.0 if i == 0 else dist2d(point["p"], self.profile[i - 1]["p"])
-            max_forward_velocity_from_previous_point = (
-                previous_speed ** 2 + 2 * self.robot.max_acceleration * distance_to_previous_point
-            ) ** 0.5
+            distance_to_previous_point = (
+                0.0 if i == 0 else dist2d(point["p"], self.profile[i - 1]["p"])
+            )
+            if i == 0:
+                step_curvature = abs(curvature)
+            else:
+                step_curvature = max(abs(curvature), abs(self.points[i - 1]["curvature"]))
+            a0 = self.accel_cap(step_curvature)
+            max_forward_velocity_from_previous_point = self.max_speed_after_distance(
+                previous_speed, distance_to_previous_point, a0
+            )
             point["lv"] = min(
                 max_forward_velocity_from_curve,
                 max_forward_velocity_from_previous_point,
@@ -198,15 +316,25 @@ class MotionProfile:
             previous_speed = point["lv"]
             point["av"] = curvature * point["lv"]
 
-        previous_speed = 0
+        previous_speed = 0.0
         next_point = None
         for i in range(len(self.profile) - 1, -1, -1):
             point = self.profile[i]
             speed_pct = self.points[i].get("max_speed", self.max_speed)
-            distance_to_next_point = 0.0 if next_point is None else dist2d(point["p"], next_point["p"])
-            max_backward_velocity_from_next_point = (
-                previous_speed ** 2 + 2 * self.robot.max_acceleration * distance_to_next_point
-            ) ** 0.5
+            distance_to_next_point = (
+                0.0 if next_point is None else dist2d(point["p"], next_point["p"])
+            )
+            if next_point is None:
+                step_curvature = abs(self.points[i]["curvature"])
+            else:
+                step_curvature = max(
+                    abs(self.points[i]["curvature"]),
+                    abs(self.points[i + 1]["curvature"]),
+                )
+            a0 = self.accel_cap(step_curvature)
+            max_backward_velocity_from_next_point = self.max_speed_before_distance(
+                previous_speed, distance_to_next_point, a0
+            )
             point["lv"] = min(
                 max_backward_velocity_from_next_point,
                 point["lv"],
@@ -216,15 +344,25 @@ class MotionProfile:
             point["av"] = self.points[i]["curvature"] * point["lv"]
             next_point = point
 
+        t_ms = 0.0
         for i, point in enumerate(self.profile):
             if i == 0:
                 point["t"] = 0.0
-            else:
-                distance_to_previous_point = dist2d(point["p"], self.profile[i - 1]["p"])
-                v_avg = (point["lv"] + self.profile[i - 1]["lv"]) / 2
-                point["t"] = int(
-                    self.profile[i - 1]["t"] + (1000 * distance_to_previous_point / v_avg if v_avg > 0 else 0.0)
-                )
+                continue
+            distance_to_previous_point = dist2d(point["p"], self.profile[i - 1]["p"])
+            step_curvature = max(
+                abs(self.points[i]["curvature"]),
+                abs(self.points[i - 1]["curvature"]),
+            )
+            a0 = self.accel_cap(step_curvature)
+            dt = self._travel_time(
+                abs(self.profile[i - 1]["lv"]),
+                abs(point["lv"]),
+                distance_to_previous_point,
+                a0,
+            )
+            t_ms += 1000.0 * dt
+            point["t"] = t_ms
 
         if self.reverse:
             for point in self.profile:
@@ -246,15 +384,19 @@ class MotionProfile:
     
     def generate_profile(self, output_path):
         self.build_profile()
-        
-        if os.path.isfile(output_path + "/" + self.name + ".json"):
+
+        output_dir = os.path.expanduser(output_path)
+        os.makedirs(output_dir, exist_ok=True)
+        out_file = os.path.join(output_dir, self.name + ".json")
+
+        if os.path.isfile(out_file):
             print(f"Profile {self.name}.json already exists! Are you sure you want to overwrite it? (y/n)")
             response = input()
             if response != "y":
                 print("Profile creation canceled!")
                 return
-        
-        with open(output_path + "/" + self.name + ".json", "w") as output_file:
+
+        with open(out_file, "w") as output_file:
             json.dump({"points": self.profile}, output_file)
 
 
@@ -314,7 +456,7 @@ if __name__ == "__main__":
         DEFAULT_RESOLUTION,
         100,
     )
-    motionProfile.generate_profile("/Volumes/ROBOT_SD")
+    motionProfile.generate_profile("~/code/vex/vid-stuffs/profiles")
 
     # prev_t = motionProfile.profile[0]["t"]
     # diffs = []

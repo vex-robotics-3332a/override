@@ -2,6 +2,7 @@ from math import cos, radians, sin
 
 import flet as ft
 
+from history import ActionHistory
 from motion import (
     FIELD_SIZE_IN,
     Curve,
@@ -13,6 +14,7 @@ from motion import (
 )
 from playback import Timeline, build_routine_timeline
 from profiling import profile_motion
+from serialize import actions_from_json, actions_to_json
 from theme import (
     ACCENT,
     ACCENT_BORDER,
@@ -22,6 +24,7 @@ from theme import (
     MONO_TEXT_STYLE,
     OUTLINED_GREEN_STYLE,
     RED_LIGHT,
+    blue_button,
     green_button,
     red_button,
     title_text,
@@ -186,7 +189,11 @@ class CanvasCurve:
 
     @property
     def curve(self) -> Curve:
-        return self.motion_action.motion.curves[self.curve_index]
+        curves = self.motion_action.motion.curves
+        if not curves:
+            raise IndexError("motion has no curves")
+        index = min(max(self.curve_index, 0), len(curves) - 1)
+        return curves[index]
 
     def canvas_color(self, selected: bool) -> str:
         return ACCENT if selected else ACCENT_LIGHT
@@ -401,8 +408,9 @@ class MotionAction(RobotAction):
     type_name = "Motion"
     icon = ft.Icons.ROUTE
 
-    def __init__(self, motion: Motion, name: str):
-        super().__init__(name)
+    def __init__(self, motion: Motion, motion_id: int = 1):
+        self.motion_id = max(1, int(motion_id))
+        super().__init__(f"Motion {self.motion_id}")
         self.motion = motion
         self.expanded = False
         self.on_select_motion = None
@@ -419,8 +427,12 @@ class MotionAction(RobotAction):
         self._dragging_curve_index: int | None = None
         self.recompute_profile()
 
+    def set_motion_id(self, motion_id: int):
+        self.motion_id = max(1, int(motion_id))
+        self.name = f"Motion {self.motion_id}"
+
     def recompute_profile(self) -> None:
-        self.time = profile_motion(self.motion, self.name)
+        self.time = profile_motion(self.motion, f"motion_{self.motion_id}")
 
     def canvas_color(self) -> str:
         return ACCENT_LIGHT
@@ -702,13 +714,6 @@ class MotionAction(RobotAction):
         return self._ensure_list_row(reorderable, selected_curve)
 
     def build_motion_editor(self) -> ft.Control:
-        def name_change(e):
-            self.name = e.control.value or self.name
-            self._notify_change(commit=False)
-
-        def name_blur(e):
-            self._notify_change(commit=True)
-
         def g1_change(e):
             self.motion.g1_continuity = bool(e.control.value)
             self._notify_change(commit=True)
@@ -716,7 +721,11 @@ class MotionAction(RobotAction):
         return ft.Column(
             spacing=10,
             controls=[
-                _text_field("Name", self.name, name_change, on_blur=name_blur, width=LEFT_PANEL_WIDTH),
+                ft.Text(
+                    f"Motion id: {self.motion_id}",
+                    size=13,
+                    color=ft.Colors.ON_SURFACE_VARIANT,
+                ),
                 ft.Row(
                     spacing=8,
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -764,6 +773,9 @@ class MotionAction(RobotAction):
 
         def reversed_change(e):
             curve.reversed = bool(e.control.value)
+            if self.motion.g1_continuity:
+                prior = previous_action.end_pose() if previous_action is not None else None
+                self.motion.enforce_g1(previous_pose=prior)
             self._notify_change(commit=True)
 
         point_rows = []
@@ -864,11 +876,26 @@ class MotionAction(RobotAction):
 
 
 class ActionList:
-    def __init__(self, page: ft.Page, on_scene_change=None, on_playback_pose=None):
+    def __init__(
+        self,
+        page: ft.Page,
+        on_scene_change=None,
+        on_playback_pose=None,
+        history: ActionHistory | None = None,
+        on_dirty=None,
+        on_save=None,
+        on_export=None,
+    ):
         self.page = page
         self.on_scene_change = on_scene_change
         self.on_playback_pose = on_playback_pose
-        self.actions: list[RobotAction] = [StartAction()]
+        self.on_dirty = on_dirty
+        self.on_save = on_save
+        self.on_export = on_export
+        self.history = history or ActionHistory()
+        self._restoring = False
+        self._dirty = False
+        self.actions: list[RobotAction] = actions_from_json(self.history.current)
         self.selected: RobotAction | None = None
         self._selected_curve: tuple[MotionAction, int] | None = None
         self._modal: ft.Container | None = None
@@ -924,6 +951,38 @@ class ActionList:
             size=12,
             color=ft.Colors.ON_SURFACE_VARIANT,
         )
+        self._save_status = ft.Text(
+            "All changes saved",
+            size=12,
+            color=ft.Colors.ON_SURFACE_VARIANT,
+        )
+        self._undo_button = ft.IconButton(
+            icon=ft.Icons.UNDO,
+            icon_size=18,
+            tooltip="Undo (⌘Z)",
+            on_click=lambda e: self.undo(),
+            disabled=True,
+        )
+        self._redo_button = ft.IconButton(
+            icon=ft.Icons.REDO,
+            icon_size=18,
+            tooltip="Redo (⇧⌘Z)",
+            on_click=lambda e: self.redo(),
+            disabled=True,
+        )
+        self._save_button = blue_button(
+            "Save",
+            icon=ft.Icons.SAVE,
+            tooltip="Save (⌘S)",
+            on_click=lambda e: self.save(),
+            disabled=True,
+        )
+        self._export_button = green_button(
+            "Export",
+            icon=ft.Icons.UPLOAD_FILE,
+            tooltip="Save, export macro, and write motion profiles",
+            on_click=lambda e: self.export(),
+        )
         self._play_button = ft.IconButton(
             icon=ft.Icons.PLAY_ARROW,
             icon_color=ft.Colors.GREEN_ACCENT_400,
@@ -953,10 +1012,10 @@ class ActionList:
                 controls=[
                     ft.Divider(height=1),
                     title_text("Simulate", size=16),
-                    ft.Row(
+                ft.Row(
                         spacing=4,
-                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                        controls=[
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    controls=[
                             self._play_button,
                             self._time_label,
                             self._duration_label,
@@ -986,7 +1045,22 @@ class ActionList:
                     ),
                     self._editor_shell,
                     ft.Divider(),
-                    green_button("New action", icon=ft.Icons.ADD, on_click=self._show_new_action_dialog),
+                        ft.Row(
+                        spacing=8,
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            controls=[
+                            green_button(
+                                "New action",
+                                icon=ft.Icons.ADD,
+                                on_click=self._show_new_action_dialog,
+                            ),
+                            self._save_button,
+                            self._export_button,
+                            self._undo_button,
+                            self._redo_button,
+                        ],
+                    ),
+                    self._save_status,
                     ft.Container(expand=True, content=self._reorder_list),
                     self._simulate_bar,
                 ],
@@ -996,14 +1070,110 @@ class ActionList:
         # Outer chrome (padding / page background) is owned by Sidebar.
         self.control = self._actions_section
 
+        # Align history.current with the live list (profiles recomputed on load).
+        self.history.replace_current(self.snapshot())
         self._set_selection_state(self.actions[0], None)
         self._apply_selection(notify=False, animate=False)
         self._refresh_timeline(emit_pose=False)
+        self._refresh_history_buttons()
+        self.set_dirty(False)
 
     def set_routine_name(self, name: str):
         self._routine_tag.value = f"Editing {name}" if name else ""
         if _is_mounted(self._routine_tag):
             self._routine_tag.update()
+
+    def snapshot(self) -> dict:
+        return actions_to_json(self.actions)
+
+    @property
+    def actions_doc(self) -> dict:
+        return self.history.current
+
+    def _refresh_history_buttons(self):
+        self._undo_button.disabled = not self.history.can_undo
+        self._redo_button.disabled = not self.history.can_redo
+        if _is_mounted(self._undo_button):
+            self._undo_button.update()
+        if _is_mounted(self._redo_button):
+            self._redo_button.update()
+
+    def set_dirty(self, dirty: bool):
+        self._dirty = bool(dirty)
+        self._save_button.disabled = not self._dirty
+        if self._dirty:
+            self._save_status.value = "Unsaved changes"
+            self._save_status.color = ACCENT_LIGHT
+        else:
+            self._save_status.value = "All changes saved"
+            self._save_status.color = ft.Colors.ON_SURFACE_VARIANT
+        if _is_mounted(self._save_button):
+            self._save_button.update()
+        if _is_mounted(self._save_status):
+            self._save_status.update()
+
+    def _mark_dirty(self):
+        if self.on_dirty is not None:
+            self.on_dirty()
+
+    def save(self):
+        if self.on_save is not None:
+            self.on_save()
+
+    def export(self):
+        if self.on_export is not None:
+            self.on_export()
+
+    def commit_history(self) -> bool:
+        """Push current action list into history if it changed."""
+        if self._restoring:
+            return False
+        changed = self.history.push(self.snapshot())
+        self._refresh_history_buttons()
+        if changed:
+            self._mark_dirty()
+        return changed
+
+    def restore_from_doc(self, doc: dict, *, notify: bool = True):
+        """Replace live actions from an actions JSON document."""
+        prev_selected_idx = self.actions.index(self.selected) if self.selected in self.actions else 0
+        prev_curve_idx = self._selected_curve[1] if self._selected_curve is not None else None
+
+        self._restoring = True
+        try:
+            if self._playing:
+                self.stop_playback()
+            self.actions = actions_from_json(doc)
+            self.history.replace_current(self.snapshot())
+
+            # Best-effort selection restore.
+            idx = min(prev_selected_idx, len(self.actions) - 1)
+            action = self.actions[idx]
+            if isinstance(action, MotionAction) and action.motion.curves:
+                curve_idx = 0 if prev_curve_idx is None else min(prev_curve_idx, len(action.motion.curves) - 1)
+                self._set_selection_state(action, (action, curve_idx))
+            else:
+                self._set_selection_state(action, None)
+
+            self._apply_selection(notify=notify, animate=False)
+            self._refresh_history_buttons()
+        finally:
+            self._restoring = False
+        self._mark_dirty()
+
+    def undo(self) -> bool:
+        doc = self.history.undo_once()
+        if doc is None:
+            return False
+        self.restore_from_doc(doc)
+        return True
+
+    def redo(self) -> bool:
+        doc = self.history.redo_once()
+        if doc is None:
+            return False
+        self.restore_from_doc(doc)
+        return True
 
     def stop_playback(self):
         self._playing = False
@@ -1293,6 +1463,7 @@ class ActionList:
                 self.refresh_editor()
         elif self.selected is target:
             self.refresh_editor()
+        self.commit_history()
 
     def _wire_action(self, action: RobotAction):
         action.on_select = self.select
@@ -1318,14 +1489,17 @@ class ActionList:
         if changed:
             self._rebuild_list()
 
+    def _renumber_motions(self):
+        """Assign 1-based motion ids from current list order."""
+        for i, action in enumerate(self.motion_actions(), start=1):
+            action.set_motion_id(i)
+            action._list_index = i
+
     def _rebuild_list(self, *, flush: bool = True):
+        self._renumber_motions()
         items = []
-        motion_idx = 0
         for action in self.actions:
-            if isinstance(action, MotionAction):
-                motion_idx += 1
-                action._list_index = motion_idx
-            else:
+            if not isinstance(action, MotionAction):
                 action._list_index = 0
             self._wire_action(action)
             if isinstance(action, MotionAction):
@@ -1351,6 +1525,7 @@ class ActionList:
         profile_action = action if isinstance(action, MotionAction) else None
         self._notify_scene(profile_action=profile_action)
         if commit:
+            self.commit_history()
             self._rebuild_list()
             if self.selected is action:
                 self.refresh_editor()
@@ -1362,6 +1537,8 @@ class ActionList:
     def reprofile(self, *, refresh_ui: bool = True):
         """Recompute all motion profiles (e.g. after robot specs change)."""
         self._profile_all_motions()
+        # Always rebuild the simulate timeline so duration reflects new profiles.
+        self._refresh_timeline(emit_pose=refresh_ui)
         if refresh_ui:
             self._rebuild_list()
             if self.selected is not None:
@@ -1374,12 +1551,14 @@ class ActionList:
             profile_action.recompute_profile()
         else:
             self._profile_all_motions()
-        self._refresh_timeline(emit_pose=True)
+        # Update canvas curve handles before emitting a playback pose — otherwise
+        # set_playback_pose → _render can touch stale CanvasCurve indices (e.g. after delete).
         if self.on_scene_change is not None:
             self.on_scene_change()
+        self._refresh_timeline(emit_pose=True)
 
-    def _next_motion_name(self) -> str:
-        return f"Motion {len(self.motion_actions()) + 1}"
+    def _next_motion_id(self) -> int:
+        return len(self.motion_actions()) + 1
 
     def _add_motion(self):
         previous = self.actions[-1] if self.actions else None
@@ -1387,9 +1566,10 @@ class ActionList:
         motion = Motion(curves=[Curve(points=default_curve_points(prev_pose))])
         if motion.g1_continuity:
             motion.enforce_g1(previous_pose=prev_pose)
-        action = MotionAction(motion, self._next_motion_name())
+        action = MotionAction(motion, self._next_motion_id())
         self.actions.append(action)
         self.select_curve(action, 0)
+        self.commit_history()
 
     def _add_curve(self, motion_action: MotionAction):
         previous = self.previous_action(motion_action)
@@ -1408,6 +1588,7 @@ class ActionList:
             else:
                 motion_action.motion.enforce_g1(previous_pose=prior_pose)
         self.select_curve(motion_action, len(motion_action.motion.curves) - 1)
+        self.commit_history()
 
     def _delete_curve(self, motion_action: MotionAction, curve_index: int):
         if len(motion_action.motion.curves) <= 1:
@@ -1419,7 +1600,12 @@ class ActionList:
         if self._selected_curve == (motion_action, curve_index):
             new_index = min(curve_index, len(motion_action.motion.curves) - 1)
             self._selected_curve = (motion_action, new_index)
-            self._apply_selection(notify=True, animate=False)
+            self.selected = motion_action
+            self._update_editor_panel(flush=False, animate=False)
+            self._rebuild_list(flush=False)
+            self._notify_scene(motion_action)
+            if _is_mounted(self.page):
+                self.page.update()
         elif (
             self._selected_curve is not None
             and self._selected_curve[0] is motion_action
@@ -1433,6 +1619,7 @@ class ActionList:
         else:
             self._rebuild_list()
             self._notify_scene(motion_action)
+        self.commit_history()
 
     def _adjust_selected_curve_after_reorder(
         self, motion_action: MotionAction, old_index: int, new_index: int
@@ -1466,6 +1653,7 @@ class ActionList:
         motion_action._dragging_curve_index = None
         self._rebuild_list()
         self._notify_scene(motion_action)
+        self.commit_history()
 
     def _close_modal(self):
         if self._modal is not None and self._modal in self.page.overlay:
@@ -1528,6 +1716,7 @@ class ActionList:
             else:
                 self._rebuild_list()
                 self._notify_scene()
+            self.commit_history()
 
         self._show_modal(
             "Delete action?",
@@ -1595,3 +1784,4 @@ class ActionList:
             action._dragging = False
         self._rebuild_list()
         self._notify_scene()
+        self.commit_history()

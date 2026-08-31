@@ -1,9 +1,13 @@
 {
   "robot": {
-    "max_speed": 76.38162268,
-    "max_accel": 100.0,
+    "max_speed": 64.6306038,
+    "max_accel": 80.0,
     "track_width": 11.5,
     "length": 15.5,
-    "width": 14.5
-  }
+    "width": 14.5,
+    "accel_curvature_gain": 2.0
+  },
+  "code_root": "~/code/vex/override/chroma-temp/src",
+  "sd_card_path": "/Volumes/ROBOT_SD",
+  "field_background": "skills"
 }

@@ -23,6 +23,12 @@ GREEN_BUTTON_STYLE = ft.ButtonStyle(
     overlay_color=ft.Colors.with_opacity(0.12, ft.Colors.WHITE),
 )
 
+BLUE_BUTTON_STYLE = ft.ButtonStyle(
+    bgcolor=ACCENT,
+    color=ft.Colors.WHITE,
+    overlay_color=ft.Colors.with_opacity(0.12, ft.Colors.WHITE),
+)
+
 RED_BUTTON_STYLE = ft.ButtonStyle(
     bgcolor=RED,
     color=ft.Colors.WHITE,
@@ -68,6 +74,10 @@ def title_text(value: str = "", *, size: int, **kwargs) -> ft.Text:
 
 def green_button(text: str, **kwargs) -> ft.FilledButton:
     return ft.FilledButton(text, style=GREEN_BUTTON_STYLE, **kwargs)
+
+
+def blue_button(text: str, **kwargs) -> ft.FilledButton:
+    return ft.FilledButton(text, style=BLUE_BUTTON_STYLE, **kwargs)
 
 
 def red_button(text: str, **kwargs) -> ft.FilledButton:

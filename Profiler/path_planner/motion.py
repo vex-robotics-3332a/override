@@ -23,12 +23,22 @@ def _handle_length(origin, handle) -> float:
     return hypot(handle[0] - origin[0], handle[1] - origin[1])
 
 
+def _heading_unit(heading_deg: float) -> tuple[float, float]:
+    return _unit(cos(radians(heading_deg)), sin(radians(heading_deg)))
+
+
 def apply_g1_from_pose(curve: "Curve", pose: tuple[float, float, float]) -> None:
-    """Lock curve.P0 to pose and align P1 with pose heading (G1 from a prior pose)."""
+    """Lock curve.P0 to pose and align P1 with pose heading (G1 from a prior pose).
+
+    Reversed curves travel with opposite chassis heading, so their geometric
+    entry tangent is opposite the pose heading.
+    """
     x, y, heading_deg = pose
     join = clamp_field_point(x, y)
     curve.points[0] = join
-    ux, uy = _unit(cos(radians(heading_deg)), sin(radians(heading_deg)))
+    ux, uy = _heading_unit(heading_deg)
+    if curve.reversed:
+        ux, uy = -ux, -uy
     handle_len = _handle_length(join, curve.points[1])
     if handle_len < 1e-6:
         handle_len = _DEFAULT_HANDLE_IN
@@ -36,10 +46,16 @@ def apply_g1_from_pose(curve: "Curve", pose: tuple[float, float, float]) -> None
 
 
 def apply_g1_forward(prev: "Curve", nxt: "Curve") -> None:
-    """Keep prev fixed; set nxt.P0/P1 for G1 (and G0) at the join."""
+    """Keep prev fixed; set nxt.P0/P1 for G1 (and G0) at the join.
+
+    When exactly one side is reversed, the geometric tangents must oppose so
+    robot heading stays continuous across the junction.
+    """
     join = prev.points[3]
     nxt.points[0] = clamp_field_point(*join)
     ux, uy = _unit(join[0] - prev.points[2][0], join[1] - prev.points[2][1])
+    if prev.reversed != nxt.reversed:
+        ux, uy = -ux, -uy
     handle_len = _handle_length(nxt.points[0], nxt.points[1])
     if handle_len < 1e-6:
         handle_len = _DEFAULT_HANDLE_IN
@@ -47,10 +63,16 @@ def apply_g1_forward(prev: "Curve", nxt: "Curve") -> None:
 
 
 def apply_g1_backward(prev: "Curve", nxt: "Curve") -> None:
-    """Keep nxt fixed; set prev.P3/P2 for G1 (and G0) at the join."""
+    """Keep nxt fixed; set prev.P3/P2 for G1 (and G0) at the join.
+
+    When exactly one side is reversed, the geometric tangents must oppose so
+    robot heading stays continuous across the junction.
+    """
     join = nxt.points[0]
     prev.points[3] = clamp_field_point(*join)
     ux, uy = _unit(nxt.points[1][0] - join[0], nxt.points[1][1] - join[1])
+    if prev.reversed != nxt.reversed:
+        ux, uy = -ux, -uy
     handle_len = _handle_length(prev.points[3], prev.points[2])
     if handle_len < 1e-6:
         handle_len = _DEFAULT_HANDLE_IN
@@ -96,13 +118,21 @@ class Curve:
     def end_point(self) -> tuple[float, float]:
         return self.points[3]
 
-    def end_heading(self) -> float:
+    def geometric_end_heading(self) -> float:
+        """Path-tangent heading at P3 (ignores reversed)."""
         p2, p3 = self.points[2], self.points[3]
         dx, dy = p3[0] - p2[0], p3[1] - p2[1]
         if dx == 0 and dy == 0:
             p0 = self.points[0]
             dx, dy = p3[0] - p0[0], p3[1] - p0[1]
         return atan2(dy, dx)
+
+    def end_heading(self) -> float:
+        """Robot heading at curve end (flipped 180° when reversed)."""
+        heading = self.geometric_end_heading()
+        if self.reversed:
+            heading += radians(180.0)
+        return heading
 
     def end_pose(self) -> tuple[float, float, float]:
         x, y = self.end_point()
@@ -153,12 +183,18 @@ class Motion:
                 apply_g1_from_pose(self.curves[0], previous_pose)
             else:
                 # Keep P0 on the prior pose; project P1 onto the pose heading.
+                # Reversed: geometric tangent opposes robot heading.
                 x, y, heading_deg = previous_pose
                 join = clamp_field_point(x, y)
                 self.curves[0].points[0] = join
-                ux, uy = _unit(cos(radians(heading_deg)), sin(radians(heading_deg)))
+                ux, uy = _heading_unit(heading_deg)
+                if self.curves[0].reversed:
+                    ux, uy = -ux, -uy
                 dragged = self.curves[0].points[1]
-                handle_len = max(_DEFAULT_HANDLE_IN * 0.25, (dragged[0] - join[0]) * ux + (dragged[1] - join[1]) * uy)
+                handle_len = max(
+                    _DEFAULT_HANDLE_IN * 0.25,
+                    (dragged[0] - join[0]) * ux + (dragged[1] - join[1]) * uy,
+                )
                 self.curves[0].points[1] = clamp_field_point(
                     join[0] + ux * handle_len, join[1] + uy * handle_len
                 )

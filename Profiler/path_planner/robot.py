@@ -21,6 +21,7 @@ class RobotSpecs:
     track_width: float
     length: float  # body length along heading (X), inches
     width: float  # body width (Y), inches
+    accel_curvature_gain: float = 1.0
 
     @classmethod
     def from_settings(cls) -> "RobotSpecs":
@@ -31,6 +32,7 @@ class RobotSpecs:
             track_width=float(data["track_width"]),
             length=float(data["length"]),
             width=float(data["width"]),
+            accel_curvature_gain=float(data.get("accel_curvature_gain", 1.0)),
         )
 
     def copy(self) -> "RobotSpecs":
@@ -40,6 +42,7 @@ class RobotSpecs:
             track_width=self.track_width,
             length=self.length,
             width=self.width,
+            accel_curvature_gain=self.accel_curvature_gain,
         )
 
     def to_dict(self) -> dict:
@@ -49,10 +52,16 @@ class RobotSpecs:
             "track_width": self.track_width,
             "length": self.length,
             "width": self.width,
+            "accel_curvature_gain": self.accel_curvature_gain,
         }
 
     def to_profiler_robot(self) -> Robot:
-        return Robot(self.max_speed, self.max_accel, self.track_width)
+        return Robot(
+            self.max_speed,
+            self.max_accel,
+            self.track_width,
+            self.accel_curvature_gain,
+        )
 
 
 # Applied specs used by profiling and canvas rendering.
