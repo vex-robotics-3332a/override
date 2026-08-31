@@ -25,7 +25,6 @@ pub struct DriveSide {
     pub raw_vel: f64,
     pub brake_mode: BrakeMode,
     pub voltage_percentage: f64,
-    pub ema_tau: f64,
 
     prev_position: Angle,
     prev_stamp: LowResolutionTime,
@@ -40,7 +39,6 @@ impl DriveSide {
         velo_controller_kp: f64,
         velo_controller_ka: f64,
         velo_controller_ff: f64,
-        ema_tau: f64
     ) -> Self {
         let gearset = motors[priority].gearset().unwrap_or(Gearset::Blue);
         Self {
@@ -60,31 +58,9 @@ impl DriveSide {
             prev_position: Angle::ZERO,
             prev_stamp: LowResolutionTime::EPOCH,
             voltage_percentage: 0.0,
-            ema_tau
         }
     }
 
-    // pub fn tick_vel(&mut self) {
-    //     let mut velofile = File::options()
-    //         .create(true) // Create file if it doesn't exist
-    //         .append(true) // Enable append mode
-    //         .open("velocity.txt").unwrap();
-
-            
-    //     let max_rpm = self.velocity_controller.gearset.max_rpm();
-    //     let motor = &self.motors[self.priority];
-    //     let now = motor.timestamp().unwrap_or(LowResolutionTime::now()).elapsed().as_secs_f64() / 60.0; 
-    //     let dt_min = now - self.last_update;
-    //     let current = self.motors[self.priority].position().unwrap_or(Angle::ZERO);
-    //     if dt_min > 0.0 {
-    //         let rpm_velocity = (current - self.prev_position).as_turns() / 0.000166667;
-    //         self.velocity = rpm_velocity / max_rpm * 100.0
-    //         //0.000166667 mins -> 10ms
-    //     }
-    //     writeln!(velofile, "{}", self.velocity).ok();
-    //     self.prev_position = current;
-    //     self.last_update = now;
-    // }
     pub fn tick_vel(&mut self) {
         let max_rpm = self.velocity_controller.gearset.max_rpm();
         let motor = &self.motors[self.priority];
@@ -108,13 +84,7 @@ impl DriveSide {
             return; // no new packet since last tick, keep previous velocity
         }
         let rpm_velocity = (current_position - self.prev_position).as_turns() / (dt.as_secs_f64() / 60.0);
-        let raw = rpm_velocity / max_rpm * 100.0;
-
-        let alpha = 1.0 - (-dt.as_secs_f64() / self.ema_tau).exp();
-        self.velocity += alpha * (raw - self.velocity);
-
-        //TEMPORARY, FOR TUNING EMA
-        self.raw_vel = raw;
+        self.velocity = rpm_velocity / max_rpm * 100.0;
 
         self.prev_position = current_position;
         self.prev_stamp = stamp;

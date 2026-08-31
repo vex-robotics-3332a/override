@@ -128,7 +128,7 @@ impl MotionProfile {
 }
 
 impl Chassis {
-    pub async fn drive_along(&mut self, profile: &mut MotionProfile) {
+    pub async fn drive_along(&self, profile: &mut MotionProfile) {
         // running fully raw (no correction) to see if the profile is roughly correct
 
         let clock = Instant::now();
