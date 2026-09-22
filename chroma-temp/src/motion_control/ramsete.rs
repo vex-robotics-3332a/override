@@ -128,11 +128,8 @@ impl MotionProfile {
 }
 
 impl Chassis {
-    pub async fn drive_along(&self, profile: &mut MotionProfile) {
-        // running fully raw (no correction) to see if the profile is roughly correct
-
+    pub async fn drive_along(&self, profile: &mut MotionProfile, beta: f64, zeta: f64) {
         let clock = Instant::now();
-
         let ct_e = TelemetryFile::new_csv(
             "ct_e.txt",
             &["timestamp", "cross track error"],
@@ -145,9 +142,6 @@ impl Chassis {
             TelemetryFile::DEFAULT_BUFFER_SIZE,
             TelemetryFile::DEFAULT_ITER_TIMEOUT,
         );
-
-        let beta = self.ramsete_config.beta;
-        let zeta = self.ramsete_config.zeta;
 
         profile.start();
         loop {

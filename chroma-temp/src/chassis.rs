@@ -10,19 +10,17 @@ pub struct Chassis {
     pub drivetrain: Rc<Mutex<Drivetrain>>,
     pub localization: Option<Localization>,
     pub imu: Rc<Mutex<InertialSensor>>,
-    pub ramsete_config: RamseteConfig,
     pub pose: Rc<Mutex<Pose>>,
 }
 
 impl Chassis {
-    pub fn new(drivetrain: Rc<Mutex<Drivetrain>>, localization: Localization, ramsete_config: RamseteConfig) -> Self {
+    pub fn new(drivetrain: Rc<Mutex<Drivetrain>>, localization: Localization) -> Self {
         let pose = Rc::clone(&localization.pose);
         let imu = Rc::clone(&localization.imu);
         Self {
             drivetrain,
             localization: Some(localization),
             imu,
-            ramsete_config,
             pose,
         }
     }
@@ -71,5 +69,18 @@ impl Chassis {
             telemetry!(pose_capture, clock.elapsed().as_millis(), x, y, heading);
             sleep(SLEEP_INTERVAL).await;
         }
+    }
+
+    pub fn op_control_tick(&mut self, controller: &Controller) {
+        let state = controller.state().expect("who didn't call the fucking controller declaration");
+        let left_stick = state.left_stick;
+        let right_stick = state.right_stick;
+        
+        let linear_power = left_stick.y() * 12.0;
+        let angular_power = right_stick.x() * 12.0;
+
+        let mut dt = self.drivetrain.try_lock().expect("Dt locked in op control tick");
+        dt.left_side.spin_v(linear_power + angular_power);
+        dt.right_side.spin_v(linear_power - angular_power);
     }
 }

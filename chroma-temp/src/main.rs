@@ -89,28 +89,26 @@ async fn main(peripherals: Peripherals) {
     let imu = InertialSensor::new(peripherals.port_20);
     let localization = Localization::new(odometry, imu);
 
-    /* misc */
-    let controller = peripherals.primary_controller;
-    let robot = Robot::new(Rc::clone(&drivetrain), controller);
-    
-    // let ramsete_config = RamseteConfig { beta: 0.004, zeta: 0.7 };
-    let ramsete_config = RamseteConfig { beta: 0.019, zeta: 0.7 };
-
-    /* Chassis Config */
-    let mut chassis = Chassis::new(
+    let chassis = Chassis::new(
         Rc::clone(&drivetrain),
-        localization,
-        ramsete_config
+        localization
     );
 
+
+    /* misc */
+    let controller = peripherals.primary_controller;
+    let mut robot = Robot::new(chassis, controller);
+
+    /* Chassis Config */
+    
     /* Task Spawning */
-    chassis.init().await;
+    robot.chassis.init().await;
 
     /* TEST CODE BELOW! */
 
-    chassis.set_brake_mode(BrakeMode::Brake);
+    robot.chassis.set_brake_mode(BrakeMode::Brake);
 
-    autos::simulate_auto::run(&chassis).await;
+    autos::simulate_auto::run(&robot.chassis).await;
 
     robot.compete().await;
 }
