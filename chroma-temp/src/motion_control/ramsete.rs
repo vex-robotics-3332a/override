@@ -167,12 +167,12 @@ impl Chassis {
 
             //rotate into local error
             let local_vector = global_vector.rotate(pose.heading * -1.0);
-            //heading is seperate because we cannot represent this via the local vector
+            //heading is separate because we cannot represent this via the local vector
             let error_heading = angle_difference(pose.heading, Angle::from_radians(point.p.2 as f64));
-            
+
             //holds the error as a pose; robot_pose + error_pose = desired_pose
             let error_pose = Pose::new(local_vector.x, local_vector.y, error_heading);
-            
+
             //correction equations
             let k = 2.0 * zeta * (av.powi(2) + beta * lv.powi(2)).sqrt();
             let e3 = error_pose.heading.as_radians();
