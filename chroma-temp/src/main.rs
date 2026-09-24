@@ -13,6 +13,7 @@ mod helpers;
 mod motion_control;
 mod chassis;
 mod telemetry;
+mod configs;
 
 extern crate alloc;
 
@@ -32,6 +33,7 @@ use std::time::*;
 use crate::chassis::Chassis;
 use crate::localization::localization::Localization;
 use crate::subsystems::drivetrain::Drivetrain;
+use crate::configs::*;
 
 const SLEEP_INTERVAL: Duration = Duration::new(0.0 as u64, 10000000);
 
@@ -91,7 +93,13 @@ async fn main(peripherals: Peripherals) {
 
     let chassis = Chassis::new(
         Rc::clone(&drivetrain),
-        localization
+        localization,
+        ChassisConfig {
+            ramsete_config: RamseteConfig {
+                beta: 0.0,
+                zeta: 0.0,
+            },
+        }
     );
 
 

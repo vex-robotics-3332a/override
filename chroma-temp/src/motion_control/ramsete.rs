@@ -47,11 +47,6 @@ pub struct Point {
     pub aa: f32,
 }
 
-pub struct RamseteConfig {
-    pub beta: f64,
-    pub zeta: f64
-}
-
 impl MotionProfile {
     pub fn new(path: &str) -> Self {
         let profile_string = read_to_string(path).unwrap();
@@ -128,7 +123,7 @@ impl MotionProfile {
 }
 
 impl Chassis {
-    pub async fn drive_along(&self, profile: &mut MotionProfile, beta: f64, zeta: f64) {
+    pub async fn drive_along(&self, profile: &mut MotionProfile) {
         let clock = Instant::now();
         let ct_e = TelemetryFile::new_csv(
             "ct_e.txt",
@@ -168,6 +163,10 @@ impl Chassis {
             let error_pose = Pose::new(local_vector.x, local_vector.y, error_heading);
 
             //correction equations
+
+            let beta = self.config.ramsete_config.beta;
+            let zeta = self.config.ramsete_config.zeta;
+            
             let k = 2.0 * zeta * (av.powi(2) + beta * lv.powi(2)).sqrt();
             let e3 = error_pose.heading.as_radians();
 

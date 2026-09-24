@@ -2,19 +2,21 @@ use vexide::{smart::motor::BrakeMode, sync::Mutex};
 use alloc::rc::Rc;
 use vexide::prelude::*;
 use std::time::Instant;
-use crate::{SLEEP_INTERVAL, localization::localization::Localization, motion_control::ramsete::RamseteConfig, subsystems::drivetrain::Drivetrain, telemetry};
+use crate::{SLEEP_INTERVAL, localization::localization::Localization, subsystems::drivetrain::Drivetrain, telemetry};
 use crate::helpers::Pose;
 use crate::telemetry::*;
+use crate::configs::ChassisConfig;
 
 pub struct Chassis {
     pub drivetrain: Rc<Mutex<Drivetrain>>,
     pub localization: Option<Localization>,
     pub imu: Rc<Mutex<InertialSensor>>,
     pub pose: Rc<Mutex<Pose>>,
+    pub config: ChassisConfig,
 }
 
 impl Chassis {
-    pub fn new(drivetrain: Rc<Mutex<Drivetrain>>, localization: Localization) -> Self {
+    pub fn new(drivetrain: Rc<Mutex<Drivetrain>>, localization: Localization, config: ChassisConfig) -> Self {
         let pose = Rc::clone(&localization.pose);
         let imu = Rc::clone(&localization.imu);
         Self {
@@ -22,6 +24,7 @@ impl Chassis {
             localization: Some(localization),
             imu,
             pose,
+            config,
         }
     }
 
