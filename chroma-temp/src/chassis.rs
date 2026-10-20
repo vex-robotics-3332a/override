@@ -1,4 +1,4 @@
-use vexide::{smart::motor::BrakeMode, sync::Mutex};
+use vexide::{smart::motor::BrakeMode, sync::Mutex, controller::ControllerState};
 use alloc::rc::Rc;
 use vexide::prelude::*;
 use std::time::Instant;
@@ -31,8 +31,14 @@ impl Chassis {
     pub async fn init(&mut self) {
         let localization = self.localization.take().expect("init called twice or localization missing");
 
-        if let Err(_) = localization.imu.try_lock().expect("IMU locked during calibration").calibrate().await {
-            println!("Calibration failed!");
+        {
+            let mut imu = localization
+                .imu
+                .try_lock()
+                .expect("IMU locked during calibration");
+            if imu.calibrate().await.is_err() {
+                println!("Calibration failed!");
+            }
         }
 
         spawn(localization.run()).detach();
@@ -74,10 +80,9 @@ impl Chassis {
         }
     }
 
-    pub fn op_control_tick(&mut self, controller: &Controller) {
-        let state = controller.state().expect("who didn't call the fucking controller declaration");
-        let left_stick = state.left_stick;
-        let right_stick = state.right_stick;
+    pub fn op_control_tick(&mut self, controller_state: &ControllerState) {
+        let left_stick = controller_state.left_stick;
+        let right_stick = controller_state.right_stick;
         
         let linear_power = left_stick.y() * 12.0;
         let angular_power = right_stick.x() * 12.0;

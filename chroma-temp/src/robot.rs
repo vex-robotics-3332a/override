@@ -3,21 +3,86 @@ use std::time::Duration;
 use crate::SLEEP_INTERVAL;
 use vexide::prelude::*;
 use crate::chassis::Chassis;
-
+use crate::subsystems::{lift::Lift, intake::Intake};
+use vexide::controller::ControllerState;
 pub struct Robot {
     pub chassis: Chassis,
     pub controller: Controller,
+    pub lift: Lift,
+    pub intake: Intake,
 }
 
 impl Robot {
-    pub fn new(chassis: Chassis, controller: Controller) -> Self {
-        Self { chassis, controller }
+    pub fn new(chassis: Chassis, controller: Controller, lift: Lift, intake: Intake) -> Self {
+        Self { chassis, controller, lift, intake }
     }
 
     pub async fn op_control(&mut self) {
         loop {
-            self.chassis.op_control_tick(&self.controller);
+            let controller_state = self.controller.state().unwrap_or_default();
+            self.chassis.op_control_tick(&controller_state);
+            self.binding(&controller_state);
             sleep(SLEEP_INTERVAL).await;
+        }
+    }
+
+    pub fn binding(&mut self, controller_state: &ControllerState) {
+        //intake
+        if controller_state.button_r1.is_now_pressed() {
+            self.intake.toggle();
+        }
+
+        let macro_running = self.lift.macro_running();
+
+        // Manual lift control is disabled while a macro holds the subsystems (avoids wrist_stop fighting PID).
+        if !macro_running {
+            //cascade lift
+            if controller_state.button_l1.is_pressed() {
+                self.lift.cascade_extend();
+            }
+
+            if controller_state.button_l2.is_pressed() {
+                self.lift.cascade_retract();
+            }
+
+            if !controller_state.button_l1.is_pressed() && !controller_state.button_l2.is_pressed() {
+                self.lift.cascade_stop();
+            }
+
+            //wrist
+            if controller_state.button_down.is_pressed() {
+                self.lift.wrist_down();
+            }
+
+            if controller_state.button_up.is_pressed() {
+                self.lift.wrist_up();
+            }
+
+            if !controller_state.button_down.is_pressed() && !controller_state.button_up.is_pressed() {
+                self.lift.wrist_stop();
+            }
+
+            //end affector
+            if controller_state.button_y.is_now_pressed() {
+                self.lift.end_affector_intake();
+            }
+
+            if controller_state.button_b.is_now_pressed() {
+                self.lift.end_affector_outtake();
+            }
+
+            if controller_state.button_a.is_now_pressed() {
+                self.lift.end_affector_stop();
+            }
+        }
+
+        //test macros
+        if controller_state.button_x.is_now_pressed() {
+            self.lift.spawn_score_position();
+        }
+
+        if controller_state.button_r2.is_now_pressed() {
+            self.lift.spawn_intake_position();
         }
     }
 }
