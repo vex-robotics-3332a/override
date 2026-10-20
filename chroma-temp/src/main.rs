@@ -153,45 +153,7 @@ async fn main(peripherals: Peripherals) {
 
     // autos::simulate_auto::run(&robot.chassis).await;
 
-    const DEBUG_LIFT: bool = true;
-    if DEBUG_LIFT {
-        let cascade_deg = Rc::clone(&robot.lift.cascade_degrees);
-        let wrist_deg = Rc::clone(&robot.lift.wrist_degrees);
-        let wrist_motor_deg = Rc::clone(&robot.lift.wrist_motor_degrees);
-        let wrist_volts = Rc::clone(&robot.lift.wrist_command_volts);
-        let wrist_ok = Rc::clone(&robot.lift.wrist_reading_ok);
-        let running_macro = robot.lift.macro_state();
-        let cascade = Rc::clone(&robot.lift.cascade);
-        let wrist = Rc::clone(&robot.lift.wrist);
-        spawn(async move {
-            loop {
-                if let Some(cascade) = cascade.try_lock() {
-                    let _ = cascade.get_height();
-                }
-                if let Some(wrist) = wrist.try_lock() {
-                    let _ = wrist.get_wrist_angle();
-                }
-                let stale = if wrist_ok.get() { "" } else { " stale" };
-                let running = match running_macro.get() {
-                    Some(name) => format!(" {name}"),
-                    None => String::new(),
-                };
-                println!(
-                    "c:{:.1} w:{:.1} m:{:.1} v:{:.1}{stale}{running}",
-                    cascade_deg.get(),
-                    wrist_deg.get(),
-                    wrist_motor_deg.get(),
-                    wrist_volts.get(),
-                );
-                sleep(Duration::from_millis(500)).await;
-            }
-        })
-        .detach();
-    }
-
     robot.compete().await;
-
-
 }
 
 #[cfg(test)]
