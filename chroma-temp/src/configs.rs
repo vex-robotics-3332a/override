@@ -7,6 +7,8 @@ pub struct RamseteConfig {
 }
 pub struct ChassisConfig {
     pub ramsete_config: RamseteConfig,
+    /// `drive_along` exits once the robot is this close (in) to the profile's final point.
+    pub exit_range: f64,
 }
 
 pub struct LiftConfig {

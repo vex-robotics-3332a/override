@@ -18,9 +18,29 @@ fn sinc(x: f64) -> f64 {
     }
 }
 
+/// Accepts milliseconds or `"inf"`; missing/null falls back to the profile duration.
+fn deserialize_timeout<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Option<f64>, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Raw {
+        Ms(f64),
+        Text(String),
+    }
+
+    Ok(match Option::<Raw>::deserialize(deserializer)? {
+        Some(Raw::Ms(ms)) => Some(ms),
+        Some(Raw::Text(text)) if text.trim().eq_ignore_ascii_case("inf") => Some(f64::INFINITY),
+        _ => None,
+    })
+}
+
 #[derive(Deserialize)]
 pub struct MotionProfile {
     pub points: Vec<Point>,
+
+    /// Hard time limit for `drive_along`, in ms.
+    #[serde(default, deserialize_with = "deserialize_timeout")]
+    pub timeout: Option<f64>,
 
     #[serde(skip)]
     pub time: Option<Instant>,
@@ -120,6 +140,20 @@ impl MotionProfile {
         let elapsed = self.time.unwrap().elapsed().as_millis() as i32;
         elapsed > self.total_time
     }
+
+    pub fn timed_out(&self) -> bool {
+        let elapsed = self.time.unwrap().elapsed().as_millis() as f64;
+        elapsed >= self.timeout.unwrap_or(self.total_time as f64)
+    }
+
+    pub fn distance_to_end(&self, x: f64, y: f64) -> f64 {
+        let Some(last) = self.points.last() else { return 0.0 };
+        (last.p.0 as f64 - x).hypot(last.p.1 as f64 - y)
+    }
+
+    pub fn ends_stopped(&self) -> bool {
+        self.points.last().is_none_or(|point| point.lv.abs() < 0.01)
+    }
 }
 
 impl Chassis {
@@ -139,6 +173,7 @@ impl Chassis {
         );
 
         profile.start();
+        let mut left_end_zone = false;
         loop {
             let time = clock.elapsed().as_millis();
             let mut dt = self.drivetrain.try_lock().expect("Dt lock failed while driving");
@@ -192,7 +227,10 @@ impl Chassis {
             telemetry!(ct_e, time, error_pose.y);
             telemetry!(theta_e, time, error_pose.heading.as_degrees());
 
-            if profile.has_ended() {
+            // Only arm the distance exit after leaving the end zone, so paths that end where they start don't exit immediately.
+            let near_end = profile.distance_to_end(pose.x, pose.y) < self.config.exit_range;
+            left_end_zone |= !near_end;
+            if profile.timed_out() || (left_end_zone && near_end) {
                 break;
             }
 
@@ -201,9 +239,11 @@ impl Chassis {
 
             sleep(SLEEP_INTERVAL).await;
         }
-        let mut dt = self.drivetrain.try_lock().expect("Dt lock failed while driving");
-        dt.stop();
-        drop(dt);
+
+        // A nonzero end speed leaves the last command running for whatever drives next.
+        if profile.ends_stopped() {
+            self.drivetrain.try_lock().expect("Dt lock failed while driving").stop();
+        }
     }
 }
 

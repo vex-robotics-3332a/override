@@ -50,12 +50,12 @@ impl Robot {
             }
 
             //wrist
-            if controller_state.button_down.is_pressed() {
-                self.lift.wrist_down();
+            if controller_state.button_down.is_now_pressed() {
+                self.lift.test_macro_up();
             }
 
-            if controller_state.button_up.is_pressed() {
-                self.lift.wrist_up();
+            if controller_state.button_up.is_now_pressed() {
+                self.lift.test_macro_down();
             }
 
             if !controller_state.button_down.is_pressed() && !controller_state.button_up.is_pressed() {
@@ -64,25 +64,22 @@ impl Robot {
 
             //end affector
             if controller_state.button_y.is_now_pressed() {
-                self.lift.end_affector_intake();
-            }
-
-            if controller_state.button_b.is_now_pressed() {
-                self.lift.end_affector_outtake();
-            }
-
-            if controller_state.button_a.is_now_pressed() {
                 self.lift.end_affector_stop();
             }
+
         }
 
-        //test macros
+        // macros
         if controller_state.button_x.is_now_pressed() {
-            self.lift.spawn_score_position();
+            self.lift.score_position();
         }
 
         if controller_state.button_r2.is_now_pressed() {
-            self.lift.spawn_intake_position();
+            self.lift.intake_position();
+        }
+
+        if controller_state.button_a.is_now_pressed() {
+            self.lift.drop_stack();
         }
     }
 }

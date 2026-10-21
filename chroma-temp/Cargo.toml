@@ -18,5 +18,6 @@ compress = true
 vexide = { version = "0.8.0", features = ["full", "default-sdk"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+futures-util = { version = "0.3", default-features = false }
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

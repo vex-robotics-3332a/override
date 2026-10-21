@@ -58,7 +58,7 @@ async fn main(peripherals: Peripherals) {
 
     let left_side = DriveSide::new(
         vec![left_motor_a, left_motor_b],
-        3.25,
+        2.75,
         36.0 / 48.0,
         1,
         velo_kp,
@@ -68,7 +68,7 @@ async fn main(peripherals: Peripherals) {
 
     let right_side = DriveSide::new(
         vec![right_motor_a, right_motor_b],
-        3.25,
+        2.75,
         36.0 / 48.0,
         1,
         velo_kp,
@@ -86,7 +86,7 @@ async fn main(peripherals: Peripherals) {
     let odometry: Odometry = Odometry::new(
         Box::new(Rc::clone(&drivetrain)),
         Box::new(NullPod::new()));
-    let imu = InertialSensor::new(peripherals.port_21);
+    let imu = InertialSensor::new(peripherals.port_17);
     let localization = Localization::new(odometry, imu);
 
     let chassis = Chassis::new(
@@ -97,6 +97,7 @@ async fn main(peripherals: Peripherals) {
                 beta: 0.019,
                 zeta: 0.7,
             },
+            exit_range: 0.5,
         }
     );
 
@@ -115,7 +116,7 @@ async fn main(peripherals: Peripherals) {
             0.02, 
             f64::INFINITY, 
             12.0, 
-            -8.0, 
+            6.0, 
             f64::INFINITY), 
         BrakeMode::Hold);
     let end_affector = EndAffector::new(
@@ -125,33 +126,26 @@ async fn main(peripherals: Peripherals) {
         Motor::new_exp(peripherals.port_3, Direction::Forward), 
         12.0/48.0, 
         PIDController::new(
-            0.8, 
+            0.4, 
             0.0, 
-            0.02, 
+            0.03, 
             f64::INFINITY, 
             8.0, 
-            -8.0, 
+            1.5, 
             f64::INFINITY), 
         BrakeMode::Hold);
     let lift = Lift::new(cascade, wrist, end_affector);
     let intake = Intake::new(Motor::new(peripherals.port_10, Gearset::Blue, Direction::Forward));
     let mut robot = Robot::new(chassis, controller, lift, intake);
 
-    // loop {
-    //     // printing this freezes the program
-    //     println!("helloworldhelloworldhelloworldhelloworld");
-    //     sleep(SLEEP_INTERVAL).await;
-    // }
     
     /* Task Spawning */
 
     robot.chassis.init().await;
 
-    /* TEST CODE BELOW! */
-
     robot.chassis.set_brake_mode(BrakeMode::Brake);
 
-    // autos::simulate_auto::run(&robot.chassis).await;
+    autos::simulate_auto::run(&mut robot).await;
 
     robot.compete().await;
 }
