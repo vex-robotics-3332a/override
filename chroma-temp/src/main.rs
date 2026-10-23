@@ -17,13 +17,14 @@ mod configs;
 
 extern crate alloc;
 
-use vexide::{peripherals, prelude::*, time};
+use vexide::{peripherals, prelude::*, time, math::*};
 use vexide::smart::{*, motor::*};
 use vexide::sync::Mutex;
 use alloc::rc::Rc;
 use subsystems::{lift::*, drivetrain::{Drivetrain, DriveSide}, intake::Intake};
 use robot::Robot;
 use localization::odometry::*;
+use localization::dsr::*;
 use motion_control::ramsete::*;
 use helpers::*;
 use std::fs::*;
@@ -36,7 +37,7 @@ use crate::localization::localization::Localization;
 use crate::configs::*;
 
 const SLEEP_INTERVAL: Duration = Duration::new(0.0 as u64, 10000000);
-
+const test: Duration = Duration::from_millis(10);
 // Dear future self...
 // I'm sorry.
 
@@ -87,6 +88,23 @@ async fn main(peripherals: Peripherals) {
         Box::new(Rc::clone(&drivetrain)),
         Box::new(NullPod::new()));
     let imu = InertialSensor::new(peripherals.port_17);
+    let left_dsr = Dsr::new(
+        DistanceSensor::new(peripherals.port_5),
+        Pose::new(2.25, 6.4375, Angle::from_degrees(90.0)),
+        0.0
+    );
+    let front_dsr = Dsr::new(
+        DistanceSensor::new(peripherals.port_4),
+        Pose::new(0.875, 4.0, Angle::from_degrees(0.0)),
+        0.0
+    );
+    let right_dsr = Dsr::new(
+        DistanceSensor::new(peripherals.port_21),
+        Pose::new(2.25, -6.4375, Angle::from_degrees(270.0)),
+        0.0
+    );
+    
+
     let localization = Localization::new(odometry, imu);
 
     let chassis = Chassis::new(
@@ -113,7 +131,7 @@ async fn main(peripherals: Peripherals) {
         PIDController::new(
             0.8, 
             0.0, 
-            0.02, 
+            0.2, 
             f64::INFINITY, 
             12.0, 
             6.0, 
@@ -136,8 +154,10 @@ async fn main(peripherals: Peripherals) {
         BrakeMode::Hold);
     let lift = Lift::new(cascade, wrist, end_affector);
     let intake = Intake::new(Motor::new(peripherals.port_10, Gearset::Blue, Direction::Forward));
-    let mut robot = Robot::new(chassis, controller, lift, intake);
+    let dsrs = Dsrs { left: left_dsr, front: front_dsr, right: right_dsr };
+    let mut robot = Robot::new(chassis, controller, lift, intake, dsrs);
 
+    
     
     /* Task Spawning */
 
@@ -145,7 +165,7 @@ async fn main(peripherals: Peripherals) {
 
     robot.chassis.set_brake_mode(BrakeMode::Brake);
 
-    autos::simulate_auto::run(&mut robot).await;
+    autos::right_3::run(&mut robot).await;
 
     robot.compete().await;
 }

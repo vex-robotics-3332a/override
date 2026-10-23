@@ -7,6 +7,7 @@ use vexide::prelude::*;
 use alloc::rc::Rc;
 use crate::helpers::*;
 use crate::motion_control::ramsete::*;
+use crate::localization::dsr::Wall;
 use futures_util::future::join;
 
 pub async fn run(robot: &mut Robot) {
@@ -14,12 +15,16 @@ pub async fn run(robot: &mut Robot) {
 	robot.chassis.set_pose(Pose::new(118.60139728096678, 72.05721299093655, Angle::from_degrees(180.0)));
 
 	let mut motion1 = MotionProfile::new("test/motion1.json");
-	join(robot.chassis.drive_along(&mut motion1), async {
-		robot.lift.intake_position();
-	}).await;
+	robot.chassis.drive_along(&mut motion1).await;
+
+robot.chassis.distance_reset(&robot.dsrs.left, Wall::Right).await;
 
 	let mut motion2 = MotionProfile::new("test/motion2.json");
-	robot.chassis.drive_along(&mut motion2).await;
+	join(robot.chassis.drive_along(&mut motion2), async {
+		robot.intake.toggle();
+	}).await;
+
+robot.chassis.distance_reset(&robot.dsrs.left, Wall::Bottom).await;
 
 	let mut motion3 = MotionProfile::new("test/motion3.json");
 	robot.chassis.drive_along(&mut motion3).await;

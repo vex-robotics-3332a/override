@@ -2,6 +2,9 @@
 use crate::motion_control::pid::PIDController;
 use crate::SLEEP_INTERVAL;
 use alloc::rc::Rc;
+use core::pin::pin;
+use std::time::Duration;
+use futures_util::future::{select, Either};
 use vexide::{math::Angle, prelude::*, smart::motor::BrakeMode, sync::Mutex};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -89,44 +92,70 @@ impl Lift {
     pub fn wrist_angle(&self) -> Angle {
         self.wrist.try_lock().expect("Wrist locked during angle").get_wrist_angle()
     }
+    
+    pub fn wrist_down_soft(&self) {
+        self.wrist.try_lock().expect("Wrist locked during down soft").down_soft();
+    }
 
     pub fn drop_stack(&self) {
-        self.spawn_macro(LiftState::Drop, |lift| async move {
+        self.spawn_macro(LiftState::Drop, Duration::from_millis(3000), |lift| async move {
             lift.end_affector_intake();
             lift.move_to(lift.cascade_height() - Angle::from_degrees(40.0), Angle::ZERO).await;
             lift.end_affector_outtake();
-            lift.move_to(lift.cascade_height(), Angle::from_degrees(40.0)).await;
+            lift.move_to(lift.cascade_height() + Angle::from_degrees(60.0), Angle::from_degrees(60.0)).await;
         });
     }
 
     pub fn intake_position(&self) {
-        self.spawn_macro(LiftState::Intake, |lift| async move {
+        self.spawn_macro(LiftState::Intake, Duration::from_millis(2000), |lift| async move {
             lift.end_affector_intake();
-            lift.move_to(Angle::from_degrees(143.0), Angle::from_degrees(-72.6)).await;
+            lift.move_to(Angle::from_degrees(143.0), Angle::from_degrees(-75.0)).await;
+            lift.wrist_down_soft();
+            sleep(Duration::from_millis(200)).await;
+            lift.set_wrist_position(Angle::from_degrees(-78.0));
         });
     }
 
     pub fn score_position(&self) {
-        self.spawn_macro(LiftState::Score, |lift| async move {
+        self.spawn_macro(LiftState::Score, Duration::from_millis(2000), |lift| async move {
             lift.end_affector_intake();
             lift.move_to(Angle::from_degrees(238.0), Angle::from_degrees(0.0)).await;
         });
     }
 
     pub fn test_macro_up(&self) {
-        self.spawn_macro(LiftState::Score, |lift| async move {
+        self.spawn_macro(LiftState::Score, Duration::from_millis(2000), |lift| async move {
             lift.move_to(Angle::from_degrees(200.0), Angle::from_degrees(-20.0)).await;
         });
     }
 
     pub fn test_macro_down(&self) {
-        self.spawn_macro(LiftState::Score, |lift| async move {
+        self.spawn_macro(LiftState::Score, Duration::from_millis(2000), |lift| async move {
             lift.move_to(Angle::from_degrees(200.0), Angle::from_degrees(20.0)).await;
         });
     }
 
+    pub fn set_wrist_position(&self, position: Angle) {
+        self.wrist.try_lock().expect("Wrist locked during set position").set_position(position);
+    }
+
+    pub fn score_at(&self, angle: f64, timeout: u64) {
+        self.spawn_macro(LiftState::Score, Duration::from_millis(timeout), |lift| async move {
+            lift.end_affector_intake();
+            lift.move_to(Angle::from_degrees(angle), Angle::from_degrees(0.0)).await;
+        });
+    }
+
+    pub fn pin_grab(&self) {
+        self.spawn_macro(LiftState::Score, Duration::from_millis(2000), |lift| async move {
+            lift.end_affector_intake();
+            lift.move_to(Angle::from_degrees(5.0), Angle::from_degrees(-10.0)).await;
+        });
+    }
+
     /// Runs `routine` in a detached task. Ignored if another macro is already running.
-    fn spawn_macro<F, Fut>(&self, next: LiftState, routine: F)
+    /// If `timeout` elapses first, the routine is cancelled and the cascade and wrist are stopped.
+    fn spawn_macro<F, Fut>(&self, next: LiftState, timeout: Duration, routine: F)
     where
         F: FnOnce(Lift) -> Fut,
         Fut: Future<Output = ()> + 'static,
@@ -139,12 +168,15 @@ impl Lift {
             *state = next;
         }
 
-        let state = Rc::clone(&self.state);
+        let lift = self.clone();
         let routine = routine(self.clone());
 
         spawn(async move {
-            routine.await;
-            *state.try_lock().expect("Lift state locked while ending macro") = LiftState::None;
+            if let Either::Right(_) = select(pin!(routine), pin!(sleep(timeout))).await {
+                lift.cascade_stop();
+                lift.wrist_stop();
+            }
+            *lift.state.try_lock().expect("Lift state locked while ending macro") = LiftState::None;
         }).detach();
     }
 
@@ -180,7 +212,7 @@ pub struct Cascade {
 
 impl Cascade {
     pub fn new(motors: Vec<Motor>, pid: PIDController, stopping_mode: BrakeMode) -> Self {
-        Self { motors, pid, stopping_mode, exit_range: 6.0 }
+        Self { motors, pid, stopping_mode, exit_range: 3.0 }
     }
 
     //i hope these worklol
@@ -266,6 +298,16 @@ impl Wrist {
 
     pub fn down(&mut self) {
         self.motor.set_voltage(self.motor.max_voltage() / 2.0).ok();
+    }
+
+    pub fn down_soft(&mut self) {
+        self.motor.set_voltage(self.motor.max_voltage() / 8.0).ok();
+    }
+
+    /// Sets the motor's encoder so `get_wrist_angle` reads `wrist_angle`. Doesn't move the wrist.
+    pub fn set_position(&mut self, wrist_angle: Angle) {
+        let motor_angle = Angle::from_degrees(wrist_angle.as_degrees() / -self.ratio);
+        self.motor.set_position(motor_angle).ok();
     }
 
     pub fn get_wrist_angle(&self) -> Angle {

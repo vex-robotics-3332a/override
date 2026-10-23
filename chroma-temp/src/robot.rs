@@ -4,17 +4,19 @@ use crate::SLEEP_INTERVAL;
 use vexide::prelude::*;
 use crate::chassis::Chassis;
 use crate::subsystems::{lift::Lift, intake::Intake};
+use crate::localization::dsr::Dsrs;
 use vexide::controller::ControllerState;
 pub struct Robot {
     pub chassis: Chassis,
     pub controller: Controller,
     pub lift: Lift,
     pub intake: Intake,
+    pub dsrs: Dsrs,
 }
 
 impl Robot {
-    pub fn new(chassis: Chassis, controller: Controller, lift: Lift, intake: Intake) -> Self {
-        Self { chassis, controller, lift, intake }
+    pub fn new(chassis: Chassis, controller: Controller, lift: Lift, intake: Intake, dsrs: Dsrs) -> Self {
+        Self { chassis, controller, lift, intake, dsrs }
     }
 
     pub async fn op_control(&mut self) {

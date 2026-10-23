@@ -1,4 +1,4 @@
-use vexide::{prelude::*, startup::banner::print};
+use vexide::{prelude::*};
 use alloc::rc::Rc;
 use vexide::sync::Mutex;
 use vexide::math::Angle;

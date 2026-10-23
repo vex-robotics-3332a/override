@@ -3,6 +3,7 @@ use alloc::rc::Rc;
 use vexide::prelude::*;
 use std::time::Instant;
 use crate::{SLEEP_INTERVAL, localization::localization::Localization, subsystems::drivetrain::Drivetrain, telemetry};
+use crate::localization::dsr::{Dsr, Wall};
 use crate::helpers::Pose;
 use crate::telemetry::*;
 use crate::configs::ChassisConfig;
@@ -53,6 +54,20 @@ impl Chassis {
         *self.pose.try_lock().expect("Pose unexpectedly locked while writing!") = new_pose;
         // pose uses CCW+, IMU heading() is CW+, and localization reads -imu.heading().
         self.imu.try_lock().expect("IMU locked while resetting heading").set_heading(-new_pose.heading).ok();
+    }
+
+    /// Snaps the pose axis facing `wall` to `dsr`'s reading, retrying briefly on bad readings.
+    /// Returns whether the reset was applied.
+    #[allow(unused)]
+    pub async fn distance_reset(&self, dsr: &Dsr, wall: Wall) -> bool {
+        for _ in 0..10 {
+            if let Some(reset) = dsr.get_pose(self.get_pose(), wall) {
+                *self.pose.try_lock().expect("Pose locked during distance reset") = reset;
+                return true;
+            }
+            sleep(SLEEP_INTERVAL).await;
+        }
+        false
     }
 
     pub fn set_brake_mode(&self, brake_mode: BrakeMode) {
