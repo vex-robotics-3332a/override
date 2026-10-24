@@ -53,11 +53,11 @@ impl Robot {
 
             //wrist
             if controller_state.button_down.is_now_pressed() {
-                self.lift.test_macro_up();
+                self.lift.wrist_down();
             }
 
             if controller_state.button_up.is_now_pressed() {
-                self.lift.test_macro_down();
+                self.lift.wrist_up();
             }
 
             if !controller_state.button_down.is_pressed() && !controller_state.button_up.is_pressed() {

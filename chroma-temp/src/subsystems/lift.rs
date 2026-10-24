@@ -64,6 +64,12 @@ impl Lift {
         *self.state.try_lock().expect("Lift state locked while reading") != LiftState::None
     }
 
+    pub async fn wait_for_macro(&self) {
+        while self.macro_running() {
+            sleep(SLEEP_INTERVAL).await;
+        }
+    }
+
     pub fn cascade_extend(&self) {
         self.cascade.try_lock().expect("Cascade locked during extend").extend();
     }
@@ -128,7 +134,7 @@ impl Lift {
             lift.move_to(Angle::from_degrees(136.0), Angle::from_degrees(-75.0)).await;
             lift.wrist_down_soft();
             sleep(Duration::from_millis(200)).await;
-            // lift.set_wrist_position(Angle::from_degrees(-90.0));
+            lift.set_wrist_position(Angle::from_degrees(-80.0));
         });
     }
 

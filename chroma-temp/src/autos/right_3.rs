@@ -15,7 +15,7 @@ pub async fn run(robot: &mut Robot) {
 	let _log_task = spawn(Chassis::log_pose(Rc::clone(&robot.chassis.pose)));
 	robot.chassis.set_pose(Pose::new(10.971865558912388, 65.64256042296071, Angle::from_degrees(180.0)));
 
-robot.lift.set_wrist_position(Angle::from_degrees(60.0));
+robot.lift.set_wrist_position(Angle::from_degrees(55.0));
 robot.lift.end_affector_intake();
 robot.lift.score_at(0.0, 500);
 robot.chassis.distance_reset(&robot.dsrs.front, Wall::Left).await;
@@ -25,6 +25,8 @@ robot.chassis.distance_reset(&robot.dsrs.front, Wall::Left).await;
 
 	let mut motion2 = MotionProfile::new("right_3p_auto/motion2.json");
 	robot.chassis.drive_along(&mut motion2).await;
+
+robot.chassis.distance_reset(&robot.dsrs.left, Wall::Bottom).await;
 
 	let mut motion3 = MotionProfile::new("right_3p_auto/motion3.json");
 	robot.chassis.drive_along(&mut motion3).await;
@@ -49,22 +51,26 @@ robot.chassis.distance_reset(&robot.dsrs.left, Wall::Left).await;
 	let mut motion6 = MotionProfile::new("right_3p_auto/motion6.json");
 	robot.chassis.drive_along(&mut motion6).await;
 
+sleep(Duration::from_millis(100)).await;
 robot.lift.pin_grab();
-sleep(Duration::from_millis(600)).await;
-robot.lift.score_at(240.0, 2000);
+robot.lift.wait_for_macro().await;
 
 	let mut motion7 = MotionProfile::new("right_3p_auto/motion7.json");
-	robot.chassis.drive_along(&mut motion7).await;
+	join(robot.chassis.drive_along(&mut motion7), async {
+		sleep(Duration::from_millis(200)).await;
+		robot.lift.score_at(240.0, 2000);
+	}).await;
 
+sleep(Duration::from_millis(100)).await;
 robot.lift.drop_stack();
-sleep(Duration::from_millis(500)).await;
+robot.lift.wait_for_macro().await;
 
 robot.chassis.distance_reset(&robot.dsrs.right, Wall::Bottom).await;
 
 	let mut motion8 = MotionProfile::new("right_3p_auto/motion8.json");
 	join(robot.chassis.drive_along(&mut motion8), async {
 		sleep(Duration::from_millis(300)).await;
-		robot.lift.score_at(300.0, 2000);
+		robot.lift.score_at(250.0, 2000);
 	}).await;
 
 robot.chassis.distance_reset(&robot.dsrs.front, Wall::Bottom).await;
@@ -80,6 +86,8 @@ robot.lift.score_at(430.0, 800);
 	let mut motion10 = MotionProfile::new("right_3p_auto/motion10.json");
 	robot.chassis.drive_along(&mut motion10).await;
 
+sleep(Duration::from_millis(300)).await;
 robot.lift.drop_stack();	
+robot.lift.wait_for_macro().await;
 
 }

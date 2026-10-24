@@ -7,6 +7,7 @@ Todos or something:
 
 mod subsystems;
 mod autos;
+mod auto_selector;
 mod robot;
 mod localization;
 mod helpers;
@@ -32,6 +33,7 @@ use std::io::{Result, Write};
 use std::time::*;
 use motion_control::pid::PIDController;
 
+use crate::auto_selector::{AutoSelector, AUTOS};
 use crate::chassis::Chassis;
 use crate::localization::localization::Localization;
 use crate::configs::*;
@@ -157,7 +159,9 @@ async fn main(peripherals: Peripherals) {
     let dsrs = Dsrs { left: left_dsr, front: front_dsr, right: right_dsr };
     let mut robot = Robot::new(chassis, controller, lift, intake, dsrs);
 
-    
+    let mut auto_selector = AutoSelector::new(AUTOS);
+
+    auto_selector.select("Right 1");
     
     /* Task Spawning */
 
@@ -165,7 +169,7 @@ async fn main(peripherals: Peripherals) {
 
     robot.chassis.set_brake_mode(BrakeMode::Brake);
 
-    autos::right_3::run(&mut robot).await;
+    auto_selector.run(&mut robot).await;
 
     robot.compete().await;
 }
