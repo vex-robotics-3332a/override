@@ -211,6 +211,14 @@ class Sidebar:
     def selected_routine(self) -> Routine:
         return self.routines[self.selected_routine_index]
 
+    def handle_keyboard(self, e: ft.KeyboardEvent) -> bool:
+        if not self.routines:
+            return False
+        action_list = self.selected_routine.action_list
+        if action_list is None:
+            return False
+        return action_list.handle_keyboard(e)
+
     def _load_routines_from_disk(self):
         index = load_index()
         loaded: list[Routine] = []
@@ -505,6 +513,12 @@ class Sidebar:
 
             return on_apply
 
+        def set_signed_field(attr: str):
+            def on_apply(v: float):
+                setattr(draft, attr, v)
+
+            return on_apply
+
         return ft.Container(
             expand=True,
             padding=16,
@@ -581,6 +595,38 @@ class Sidebar:
                     ft.Text("Body size", size=14, weight=ft.FontWeight.BOLD),
                     _num_field("Length X (in)", draft.length, set_field("length"), width=None),
                     _num_field("Width Y (in)", draft.width, set_field("width"), width=None),
+                    ft.Divider(height=1),
+                    ft.Text("Turning center offset", size=14, weight=ft.FontWeight.BOLD),
+                    ft.Text(
+                        "Where the robot turns about, relative to the body's center. "
+                        "+X is forward along the heading, +Y is to the robot's left. "
+                        "Poses and paths track the turning center.",
+                        size=11,
+                        color=ft.Colors.ON_SURFACE_VARIANT,
+                    ),
+                    ft.Row(
+                        spacing=8,
+                        controls=[
+                            ft.Container(
+                                expand=True,
+                                content=_num_field(
+                                    "Offset X (in)",
+                                    draft.turn_offset_x,
+                                    set_signed_field("turn_offset_x"),
+                                    width=None,
+                                ),
+                            ),
+                            ft.Container(
+                                expand=True,
+                                content=_num_field(
+                                    "Offset Y (in)",
+                                    draft.turn_offset_y,
+                                    set_signed_field("turn_offset_y"),
+                                    width=None,
+                                ),
+                            ),
+                        ],
+                    ),
                     ft.Container(height=4),
                     green_button("Apply robot changes", on_click=lambda e: self._confirm_apply_robot()),
                 ],
@@ -662,7 +708,8 @@ class Sidebar:
                     f"Track width: {draft.track_width:g} in\n"
                     f"Accel curvature gain: {draft.accel_curvature_gain:g}\n"
                     f"Length X: {draft.length:g} in\n"
-                    f"Width Y: {draft.width:g} in"
+                    f"Width Y: {draft.width:g} in\n"
+                    f"Turn offset: ({draft.turn_offset_x:g}, {draft.turn_offset_y:g}) in"
                 ),
             ),
             [

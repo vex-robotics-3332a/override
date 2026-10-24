@@ -142,11 +142,20 @@ class Curve:
 class Motion:
     """A motion action composed of one or more bezier curves."""
 
-    def __init__(self, curves: list[Curve] | None = None, g1_continuity: bool = True):
+    def __init__(
+        self,
+        curves: list[Curve] | None = None,
+        g1_continuity: bool = True,
+        end_speed: float = 0.0,
+        start_speed: float = 0.0,
+    ):
         if curves is None:
             curves = []
         self.curves = curves
         self.g1_continuity = g1_continuity
+        # Percent of robot max speed at the start / end of the motion (0 = at rest).
+        self.start_speed = start_speed
+        self.end_speed = end_speed
         self.profile: list[dict] | None = None
         self.time: float = 0.0
 

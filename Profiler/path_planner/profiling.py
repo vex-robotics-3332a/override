@@ -27,6 +27,8 @@ def profile_motion(motion: Motion, name: str = "motion") -> float:
         curves,
         max_speeds=max_speeds,
         reverse=reverse,
+        start_speed=motion.start_speed,
+        end_speed=motion.end_speed,
         name=name,
         robot=get_robot_specs().to_profiler_robot(),
     )

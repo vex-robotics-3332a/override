@@ -83,46 +83,62 @@ def _normalize_samples(
     return dense
 
 
+def _hold(samples, t_offset: float, pose, dwell_ms: float) -> float:
+    """Stay at ``pose`` for ``dwell_ms``. Returns the updated time offset."""
+    x, y, heading = pose
+    if not samples or samples[-1][0] != t_offset:
+        samples.append((t_offset, x, y, heading))
+    dwell = max(0.0, float(dwell_ms))
+    if dwell > 0:
+        t_offset += dwell
+        samples.append((t_offset, x, y, heading))
+    return t_offset
+
+
 def build_routine_timeline(actions) -> Timeline:
-    """Stitch Start dwell + each motion's continuous profile into one path."""
+    """Stitch start dwell, code-action waits, and motion profiles into one path."""
     from actions import MotionAction, StartAction
 
     samples: list[tuple[float, float, float, float]] = []
     t_offset = 0.0
-
-    start = next((a for a in actions if isinstance(a, StartAction)), None)
-    if start is not None:
-        x, y, heading = start.end_pose()
-        samples.append((0.0, x, y, heading))
-        if start.time > 0:
-            t_offset = float(start.time)
-            samples.append((t_offset, x, y, heading))
+    pose = (24.0, 24.0, 0.0)
 
     for action in actions:
-        if not isinstance(action, MotionAction):
+        if isinstance(action, StartAction):
+            pose = action.end_pose()
+            t_offset = _hold(samples, t_offset, pose, action.time)
             continue
 
-        profile = action.motion.profile or []
-        if not profile:
-            # Fall back to geometric endpoints if unprofiled.
-            if not action.motion.curves:
+        if isinstance(action, MotionAction):
+            profile = action.motion.profile or []
+            if not profile:
+                if not action.motion.curves:
+                    continue
+                x0, y0 = action.motion.curves[0].start_point()
+                heading0 = degrees(action.motion.curves[0].end_heading())
+                samples.append((t_offset, x0, y0, heading0))
+                end = action.end_pose()
+                elapsed = float(action.motion.time or 0.0)
+                if end is not None:
+                    pose = end
+                    samples.append((t_offset + elapsed, end[0], end[1], end[2]))
+                t_offset += elapsed
                 continue
-            x0, y0 = action.motion.curves[0].start_point()
-            end = action.motion.end_pose()
-            heading0 = degrees(action.motion.curves[0].end_heading())
-            samples.append((t_offset, x0, y0, heading0))
+
+            for point in profile:
+                x, y, theta = point["p"]
+                samples.append(
+                    (t_offset + float(point["t"]), float(x), float(y), degrees(float(theta)))
+                )
+            end = action.end_pose()
             if end is not None:
-                samples.append((t_offset + float(action.motion.time or 0.0), end[0], end[1], end[2]))
-            t_offset += float(action.motion.time or 0.0)
+                pose = end
+            last_t = float(profile[-1]["t"])
+            t_offset += float(action.motion.time) if action.motion.time else last_t
             continue
 
-        for point in profile:
-            x, y, theta = point["p"]
-            samples.append(
-                (t_offset + float(point["t"]), float(x), float(y), degrees(float(theta)))
-            )
-        last_t = float(profile[-1]["t"])
-        t_offset += float(action.motion.time) if action.motion.time else last_t
+        # Code actions (and anything else without its own path) hold position.
+        t_offset = _hold(samples, t_offset, pose, getattr(action, "time", 0.0) or 0.0)
 
     if not samples:
         samples = [(0.0, 24.0, 24.0, 0.0)]

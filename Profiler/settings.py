@@ -17,6 +17,10 @@ _DEFAULT_ROBOT = {
     # Scales accel with curvature: a = a_max / (1 + gain*|κ|*track/2).
     # 0 = ignore curvature; 1 ≈ wheel force split; >1 adds rotational inertia.
     "accel_curvature_gain": 1.0,
+    # Turning center relative to the body's geometric center, in the robot frame
+    # (+X forward along heading, +Y to the robot's left), inches.
+    "turn_offset_x": 0.0,
+    "turn_offset_y": 0.0,
 }
 
 _DEFAULT_SETTINGS = {

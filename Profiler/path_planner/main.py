@@ -67,6 +67,8 @@ def main(page: ft.Page):
         sidebar.action_list.on_canvas_point_drag_end(target)
 
     def on_keyboard(e: ft.KeyboardEvent):
+        if sidebar.handle_keyboard(e):
+            return
         if not (e.ctrl or e.meta):
             return
         key = (e.key or "").upper()

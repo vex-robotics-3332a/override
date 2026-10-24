@@ -1,4 +1,4 @@
-use alloc::rc::Rc;
+use alloc::rc::{Rc, Weak};
 use core::fmt::Write as FmtWrite;
 use std::fmt::Display;
 use std::fs::File;
@@ -76,15 +76,20 @@ impl TelemetryFile {
             iter_timeout,
         }));
 
-        spawn(Self::flush_loop(Rc::clone(&state))).detach();
+        spawn(Self::flush_loop(Rc::downgrade(&state))).detach();
 
         Self { state }
     }
 
-    async fn flush_loop(state: Rc<Mutex<TelemetryState>>) {
+    /// Holds a `Weak` so the file closes once the `TelemetryFile` and pending writes drop;
+    /// VEXos only allows a few open files at once.
+    async fn flush_loop(state: Weak<Mutex<TelemetryState>>) {
         loop {
             sleep(crate::SLEEP_INTERVAL).await;
 
+            let Some(state) = state.upgrade() else {
+                return;
+            };
             let Some(mut s) = state.try_lock() else {
                 continue;
             };

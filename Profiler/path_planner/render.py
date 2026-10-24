@@ -304,7 +304,11 @@ class FieldCanvas:
         ]
 
     def _robot_body_shapes(self, pose: tuple[float, float, float], *, color: str | None = None):
-        """Translucent body rectangle from length/width, centered on the tracking point."""
+        """Translucent body rectangle from length/width.
+
+        The pose is the turning center, so the body is shifted back by the
+        configured turn offset.
+        """
         x, y, heading = pose
         length = max(0.0, self._robot_specs.length)
         width = max(0.0, self._robot_specs.width)
@@ -315,6 +319,10 @@ class FieldCanvas:
         h = radians(heading)
         fx, fy = cos(h), sin(h)
         rx, ry = -sin(h), cos(h)
+        ox = self._robot_specs.turn_offset_x
+        oy = self._robot_specs.turn_offset_y
+        x -= fx * ox + rx * oy
+        y -= fy * ox + ry * oy
         hl, hw = length / 2.0, width / 2.0
         corners = [
             self.field_to_screen(x + fx * hl + rx * hw, y + fy * hl + ry * hw),

@@ -13,8 +13,7 @@ import sys
 #   3, 3.458909
 
 file_paths = [
-    "/Volumes/ROBOT_SD/ct_e.txt",
-    "/Volumes/ROBOT_SD/theta_e.txt",
+    "/Volumes/ROBOT_SD/wrist.txt",
     # "/Volumes/ROBOT_SD/voltage.txt",
 ]
 # file_paths = [
@@ -43,9 +42,10 @@ for file_path in file_paths:
     index_as_x = len(header_cols) == 1
     if index_as_x:
         x_label = "index"
-        y_label = header_cols[0]
+        y_labels = header_cols
     else:
-        x_label, y_label = header_cols
+        x_label = header_cols[0]
+        y_labels = header_cols[1:]
 
     if expected_x_label is None:
         expected_x_label = x_label
@@ -55,18 +55,20 @@ for file_path in file_paths:
         )
 
     x_vals = []
-    y_vals = []
+    y_vals = [[] for _ in y_labels]
     for i, line in enumerate(lines[1:]):
-        parts = line.split(",")
+        parts = [p.strip() for p in line.split(",")]
         if index_as_x:
             x_vals.append(float(i))
-            y_vals.append(float(parts[0].strip()))
+            cols = parts
         else:
-            x_vals.append(float(parts[0].strip()))
-            y_vals.append(float(parts[1].strip()))
+            x_vals.append(float(parts[0]))
+            cols = parts[1:]
+        for series_idx in range(len(y_labels)):
+            y_vals[series_idx].append(float(cols[series_idx]))
 
-    label = f"{y_label}"
-    ax.plot(x_vals, y_vals, label=label)
+    for y_label, series in zip(y_labels, y_vals):
+        ax.plot(x_vals, series, label=y_label)
 
     
 

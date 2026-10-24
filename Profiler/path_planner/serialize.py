@@ -2,9 +2,37 @@
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 from motion import Curve, Motion, clamp_field_coord
+
+INF_TIMEOUT = "inf"
+
+
+def timeout_to_json(timeout: float | None) -> float | str | None:
+    """``None`` (follow profile time), ms, or ``"inf"`` (JSON has no infinity)."""
+    if timeout is None:
+        return None
+    if math.isinf(timeout):
+        return INF_TIMEOUT
+    return float(timeout)
+
+
+def timeout_from_json(value: Any) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        text = value.strip().lower()
+        if text in ("", "auto", "default"):
+            return None
+        if text in ("inf", "infinity", "∞"):
+            return math.inf
+        value = text
+    try:
+        return max(0.0, float(value))
+    except (TypeError, ValueError):
+        return None
 
 ACTIONS_VERSION = 1
 ROUTINES_VERSION = 1
@@ -31,6 +59,8 @@ def curve_from_json(data: dict[str, Any]) -> Curve:
 def motion_to_json(motion: Motion) -> dict[str, Any]:
     return {
         "g1_continuity": bool(motion.g1_continuity),
+        "start_speed": float(motion.start_speed),
+        "end_speed": float(motion.end_speed),
         "curves": [curve_to_json(c) for c in motion.curves],
     }
 
@@ -42,6 +72,8 @@ def motion_from_json(data: dict[str, Any]) -> Motion:
     return Motion(
         curves=curves,
         g1_continuity=bool(data.get("g1_continuity", True)),
+        end_speed=float(data.get("end_speed", 0.0)),
+        start_speed=float(data.get("start_speed", 0.0)),
     )
 
 
@@ -52,7 +84,7 @@ def action_to_json(action, *, include_profile_time: bool = True) -> dict[str, An
     Undo snapshots may keep it via ``include_profile_time=True``.
     """
     # Import locally to avoid a serialize ↔ actions import cycle at module load.
-    from actions import MotionAction, StartAction
+    from actions import CodeAction, MotionAction, StartAction
 
     if isinstance(action, StartAction):
         return {
@@ -68,15 +100,24 @@ def action_to_json(action, *, include_profile_time: bool = True) -> dict[str, An
             "type": "motion",
             "id": int(action.motion_id),
             **motion_to_json(action.motion),
+            "code": action.code,
+            "timeout": timeout_to_json(action.timeout),
         }
         if include_profile_time:
             payload["time"] = float(action.time)
         return payload
+    if isinstance(action, CodeAction):
+        return {
+            "type": "action",
+            "name": action.name,
+            "code": action.code,
+            "time": float(action.time),
+        }
     raise TypeError(f"Unsupported action type: {type(action)!r}")
 
 
 def action_from_json(data: dict[str, Any]):
-    from actions import MotionAction, StartAction
+    from actions import CodeAction, MotionAction, StartAction
 
     kind = data.get("type")
     if kind == "start":
@@ -92,11 +133,22 @@ def action_from_json(data: dict[str, Any]):
         if "id" not in data:
             raise ValueError("Motion action requires numeric 'id'")
         motion = motion_from_json(data)
-        action = MotionAction(motion, int(data["id"]))
+        action = MotionAction(
+            motion,
+            int(data["id"]),
+            code=str(data.get("code") or ""),
+            timeout=timeout_from_json(data.get("timeout")),
+        )
         # Prefer recomputed profile time; keep serialized time only as fallback.
         if action.time <= 0 and "time" in data:
             action.time = float(data["time"])
         return action
+    if kind == "action":
+        return CodeAction(
+            code=str(data.get("code") or ""),
+            time=max(0.0, float(data.get("time", 0.0))),
+            name=str(data.get("name") or "Action"),
+        )
     raise ValueError(f"Unknown action type: {kind!r}")
 
 
@@ -122,16 +174,20 @@ def actions_from_json(data: dict[str, Any] | None) -> list:
         return [StartAction()]
     actions = [action_from_json(item) for item in raw]
     # Guarantee a Start action at index 0.
-    from actions import MotionAction, StartAction
+    from actions import CodeAction, MotionAction, StartAction
 
     if not actions or not isinstance(actions[0], StartAction):
         actions.insert(0, StartAction())
-    # Normalize motion ids to 1-based list order.
+    # Normalize motion and code-action ids to 1-based list order.
     motion_i = 0
+    code_i = 0
     for action in actions:
         if isinstance(action, MotionAction):
             motion_i += 1
             action.set_motion_id(motion_i)
+        elif isinstance(action, CodeAction):
+            code_i += 1
+            action.set_action_id(code_i)
     return actions
 
 

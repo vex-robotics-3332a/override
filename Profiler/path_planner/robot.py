@@ -22,6 +22,9 @@ class RobotSpecs:
     length: float  # body length along heading (X), inches
     width: float  # body width (Y), inches
     accel_curvature_gain: float = 1.0
+    # Turning center offset from the body center: +X forward, +Y left, inches.
+    turn_offset_x: float = 0.0
+    turn_offset_y: float = 0.0
 
     @classmethod
     def from_settings(cls) -> "RobotSpecs":
@@ -33,6 +36,8 @@ class RobotSpecs:
             length=float(data["length"]),
             width=float(data["width"]),
             accel_curvature_gain=float(data.get("accel_curvature_gain", 1.0)),
+            turn_offset_x=float(data.get("turn_offset_x", 0.0)),
+            turn_offset_y=float(data.get("turn_offset_y", 0.0)),
         )
 
     def copy(self) -> "RobotSpecs":
@@ -43,6 +48,8 @@ class RobotSpecs:
             length=self.length,
             width=self.width,
             accel_curvature_gain=self.accel_curvature_gain,
+            turn_offset_x=self.turn_offset_x,
+            turn_offset_y=self.turn_offset_y,
         )
 
     def to_dict(self) -> dict:
@@ -53,6 +60,8 @@ class RobotSpecs:
             "length": self.length,
             "width": self.width,
             "accel_curvature_gain": self.accel_curvature_gain,
+            "turn_offset_x": self.turn_offset_x,
+            "turn_offset_y": self.turn_offset_y,
         }
 
     def to_profiler_robot(self) -> Robot:

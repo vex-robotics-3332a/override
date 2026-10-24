@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from parser import export_routine_macro
-from serialize import routine_to_disk_json
+from serialize import routine_to_disk_json, timeout_to_json
 from storage import resolve_sd_routine_dir
 
 # Local fallback when the configured SD card path is missing / unwritable.
@@ -92,7 +92,11 @@ def write_motion_profiles(routine, profile_dir: Path) -> list[Path]:
         action.recompute_profile()
         profile = action.motion.profile or []
         out = profile_dir / f"motion{action.motion_id}.json"
-        out.write_text(json.dumps({"points": profile}, indent=2) + "\n", encoding="utf-8")
+        doc = {
+            "timeout": timeout_to_json(action.effective_timeout),
+            "points": profile,
+        }
+        out.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
         written.append(out)
     return written
 

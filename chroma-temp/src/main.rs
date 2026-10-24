@@ -129,12 +129,12 @@ async fn main(peripherals: Peripherals) {
     let cascade = Cascade::new(
         vec![lift_motor_a, lift_motor_b], 
         PIDController::new(
-            0.8, 
+            0.6, 
             0.0, 
             0.2, 
             f64::INFINITY, 
             12.0, 
-            6.0, 
+            3.0, 
             f64::INFINITY), 
         BrakeMode::Hold);
     let end_affector = EndAffector::new(

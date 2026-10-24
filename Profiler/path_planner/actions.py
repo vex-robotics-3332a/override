@@ -1,3 +1,5 @@
+import math
+import re
 from math import cos, radians, sin
 
 import flet as ft
@@ -14,7 +16,7 @@ from motion import (
 )
 from playback import Timeline, build_routine_timeline
 from profiling import profile_motion
-from serialize import actions_from_json, actions_to_json
+from serialize import actions_from_json, actions_to_json, timeout_from_json
 from theme import (
     ACCENT,
     ACCENT_BORDER,
@@ -35,7 +37,12 @@ POINT_LABELS = ("P0", "P1", "P2", "P3")
 
 CREATABLE_ACTION_TYPES: dict[str, str] = {
     "Motion": "Cubic bezier path",
+    "Action": "Robot code and a wait",
 }
+
+# One indent level inserted by Tab / newline in the action code box.
+_INDENT = "\t"
+_BRACKET_PAIRS = {"(": ")", "[": "]", "{": "}"}
 
 TITLE_SIZE_LIST = 20
 TITLE_SIZE_EDITOR = 18
@@ -72,6 +79,178 @@ def _text_field(
         focused_border_width=2,
         focused_border_color=ACCENT_BORDER,
     )
+
+
+def _leading_whitespace(line: str) -> str:
+    index = 0
+    while index < len(line) and line[index] in " \t":
+        index += 1
+    return line[:index]
+
+
+def _indent_levels(whitespace: str) -> int:
+    """Count indent levels. A tab or four spaces is one level."""
+    levels = 0
+    index = 0
+    while index < len(whitespace):
+        if whitespace[index] == "\t":
+            levels += 1
+            index += 1
+        elif whitespace.startswith("    ", index):
+            levels += 1
+            index += 4
+        else:
+            break
+    return levels
+
+
+def _indent_text(levels: int) -> str:
+    return _INDENT * max(0, levels)
+
+
+def _previous_nonempty_line(text: str, line_start: int) -> str | None:
+    """Return the previous line that contains non-whitespace, if any."""
+    cursor = line_start
+    while cursor > 0:
+        prev_end = cursor - 1
+        prev_start = text.rfind("\n", 0, prev_end) + 1
+        line = text[prev_start:prev_end]
+        if line.strip():
+            return line
+        cursor = prev_start
+    return None
+
+
+def _smart_indent(text: str, line_start: int) -> str:
+    """Indent a line should have, based on the previous non-empty line."""
+    previous = _previous_nonempty_line(text, line_start)
+    if previous is None:
+        return ""
+    levels = _indent_levels(_leading_whitespace(previous))
+    if previous.rstrip().endswith(("{", "(", "[")):
+        levels += 1
+    return _indent_text(levels)
+
+
+def _line_bounds(text: str, index: int) -> tuple[int, int]:
+    index = max(0, min(index, len(text)))
+    start = text.rfind("\n", 0, index) + 1
+    end = text.find("\n", index)
+    if end < 0:
+        end = len(text)
+    return start, end
+
+
+def _diff_cursor(old: str, new: str) -> int | None:
+    """Caret after a one-character insert or delete, found by diffing."""
+    if abs(len(new) - len(old)) != 1:
+        return None
+    prefix = 0
+    limit = min(len(old), len(new))
+    while prefix < limit and old[prefix] == new[prefix]:
+        prefix += 1
+    return prefix + 1 if len(new) > len(old) else prefix
+
+
+def transform_code_edit(old: str, new: str, cursor: int | None) -> tuple[str, int] | None:
+    """Autocomplete brackets and indent after a single-character edit.
+
+    Returns ``(text, caret)`` when the edit should be rewritten, or ``None``
+    to keep ``new`` as typed. ``cursor`` is the caret after the edit; when it
+    is missing or does not match the edit (a stale selection), the edit
+    position is found by diffing instead.
+    """
+    if cursor is not None:
+        cursor = max(0, min(int(cursor), len(new)))
+        if _edit_matches(old, new, cursor):
+            return _transform_at(old, new, cursor)
+    fallback = _diff_cursor(old, new)
+    if fallback is None:
+        return None
+    return _transform_at(old, new, fallback)
+
+
+def _edit_matches(old: str, new: str, cursor: int) -> bool:
+    if len(new) == len(old) + 1:
+        return cursor > 0 and new[: cursor - 1] + new[cursor:] == old
+    if len(new) == len(old) - 1:
+        return cursor <= len(old) - 1 and new[:cursor] + old[cursor] + new[cursor:] == old
+    return False
+
+
+def _transform_at(old: str, new: str, cursor: int) -> tuple[str, int] | None:
+    if len(new) == len(old) + 1 and cursor > 0 and new[: cursor - 1] + new[cursor:] == old:
+        typed = new[cursor - 1]
+        closer = _BRACKET_PAIRS.get(typed)
+        if closer is not None:
+            return new[:cursor] + closer + new[cursor:], cursor
+        if typed in _BRACKET_PAIRS.values() and cursor < len(new) and new[cursor] == typed:
+            # The closer was already inserted; step over it instead of doubling it.
+            return new[: cursor - 1] + new[cursor:], cursor
+        if typed == "\n":
+            return _indent_after_newline(new, cursor)
+        return None
+
+    if (
+        len(new) == len(old) - 1
+        and cursor <= len(old) - 1
+        and new[:cursor] + old[cursor] + new[cursor:] == old
+    ):
+        deleted = old[cursor]
+        closer = _BRACKET_PAIRS.get(deleted)
+        if closer is not None and cursor < len(new) and new[cursor] == closer:
+            return new[:cursor] + new[cursor + 1 :], cursor
+    return None
+
+
+def _indent_after_newline(text: str, cursor: int) -> tuple[str, int]:
+    """``cursor`` sits just after the newline that was inserted."""
+    line_start = text.rfind("\n", 0, cursor - 1) + 1
+    previous = text[line_start : cursor - 1]
+    levels = _indent_levels(_leading_whitespace(previous))
+    opened = previous.rstrip().endswith(("{", "(", "["))
+    if opened:
+        levels += 1
+    indent = _indent_text(levels)
+    rest = text[cursor:]
+    if opened and rest[:1] in {")", "]", "}"}:
+        outer = _indent_text(levels - 1)
+        updated = text[:cursor] + indent + "\n" + outer + rest
+        return updated, cursor + len(indent)
+    updated = text[:cursor] + indent + rest
+    return updated, cursor + len(indent)
+
+
+def apply_tab_edit(text: str, cursor: int, *, shift: bool) -> tuple[str, int]:
+    """Insert or remove one indent level at the caret's line."""
+    cursor = max(0, min(int(cursor), len(text)))
+    line_start, line_end = _line_bounds(text, cursor)
+    line = text[line_start:line_end]
+    column = cursor - line_start
+    whitespace = _leading_whitespace(line)
+    body = line[len(whitespace) :]
+    levels = _indent_levels(whitespace)
+
+    if shift:
+        if levels <= 0:
+            return text, cursor
+        new_ws = _indent_text(levels - 1)
+    elif column <= len(whitespace):
+        target = _indent_levels(_smart_indent(text, line_start))
+        if levels >= target:
+            target = levels + 1
+        new_ws = _indent_text(target)
+    else:
+        updated = text[:cursor] + _INDENT + text[cursor:]
+        return updated, cursor + len(_INDENT)
+
+    new_line = new_ws + body
+    updated = text[:line_start] + new_line + text[line_end:]
+    if column <= len(whitespace):
+        new_cursor = line_start + len(new_ws)
+    else:
+        new_cursor = line_start + len(new_ws) + (column - len(whitespace))
+    return updated, new_cursor
 
 
 def _format_num(value: float) -> str:
@@ -408,10 +587,31 @@ class MotionAction(RobotAction):
     type_name = "Motion"
     icon = ft.Icons.ROUTE
 
-    def __init__(self, motion: Motion, motion_id: int = 1):
+    def __init__(
+        self,
+        motion: Motion,
+        motion_id: int = 1,
+        code: str = "",
+        timeout: float | None = None,
+    ):
         self.motion_id = max(1, int(motion_id))
         super().__init__(f"Motion {self.motion_id}")
         self.motion = motion
+        # ms, math.inf, or None to follow the profile time. Export-only: the
+        # simulation always runs for the profile time.
+        self.timeout = timeout
+        self.on_timeout_change = None
+        # Runs concurrently with the drive (joined with drive_along on export).
+        self.code = code
+        self.on_code_change = None
+        self.code_editor = CodeEditor(
+            lambda: self.code,
+            lambda text: setattr(self, "code", text),
+            self._code_edited,
+            hint="action1();",
+            min_lines=5,
+            max_lines=12,
+        )
         self.expanded = False
         self.on_select_motion = None
         self.on_select_curve = None
@@ -431,8 +631,27 @@ class MotionAction(RobotAction):
         self.motion_id = max(1, int(motion_id))
         self.name = f"Motion {self.motion_id}"
 
+    def _code_edited(self, commit: bool):
+        if self.on_code_change is not None:
+            self.on_code_change(self, commit=commit)
+
+    def _timeout_edited(self, commit: bool):
+        if self.on_timeout_change is not None:
+            self.on_timeout_change(self, commit=commit)
+
     def recompute_profile(self) -> None:
         self.time = profile_motion(self.motion, f"motion_{self.motion_id}")
+
+    @property
+    def effective_timeout(self) -> float:
+        return self.time if self.timeout is None else self.timeout
+
+    def _timeout_label(self) -> str:
+        if self.timeout is None:
+            return "Profile time"
+        if math.isinf(self.timeout):
+            return "inf"
+        return f"{self.timeout:.0f} ms"
 
     def canvas_color(self) -> str:
         return ACCENT_LIGHT
@@ -488,7 +707,27 @@ class MotionAction(RobotAction):
                         tight=True,
                         controls=[
                             _tag_line("Total time", f"{self.time:.0f} ms", muted=True),
+                            *(
+                                [_tag_line("Timeout", self._timeout_label(), muted=True)]
+                                if self.timeout is not None
+                                else []
+                            ),
                             _tag_line("Curves", f"{count} {curve_label}", muted=True),
+                            *(
+                                [_tag_line("Start speed", f"{self.motion.start_speed:.0f}%", muted=True)]
+                                if self.motion.start_speed > 0
+                                else []
+                            ),
+                            *(
+                                [_tag_line("End speed", f"{self.motion.end_speed:.0f}%", muted=True)]
+                                if self.motion.end_speed > 0
+                                else []
+                            ),
+                            *(
+                                [_tag_line("During", _code_preview(self.code, 30), muted=True)]
+                                if self.code.strip()
+                                else []
+                            ),
                         ],
                     ),
                 ),
@@ -718,6 +957,67 @@ class MotionAction(RobotAction):
             self.motion.g1_continuity = bool(e.control.value)
             self._notify_change(commit=True)
 
+        def start_speed_apply(v):
+            self.motion.start_speed = max(0.0, v)
+            self._notify_change(commit=False)
+
+        def start_speed_commit(v):
+            self.motion.start_speed = max(0.0, v)
+            self._notify_change(commit=True)
+
+        def end_speed_apply(v):
+            self.motion.end_speed = max(0.0, v)
+            self._notify_change(commit=False)
+
+        def end_speed_commit(v):
+            self.motion.end_speed = max(0.0, v)
+            self._notify_change(commit=True)
+
+        def timeout_text() -> str:
+            if self.timeout is None:
+                return ""
+            if math.isinf(self.timeout):
+                return "inf"
+            return _format_num(self.timeout)
+
+        def parse_timeout(raw: str) -> tuple[bool, float | None]:
+            text = raw.strip()
+            if not text:
+                return True, None
+            value = timeout_from_json(text)
+            return value is not None, value
+
+        def timeout_change(e):
+            ok, value = parse_timeout(e.control.value or "")
+            if ok and value != self.timeout:
+                self.timeout = value
+                self._timeout_edited(commit=False)
+
+        def timeout_blur(e):
+            ok, value = parse_timeout(e.control.value or "")
+            if ok:
+                self.timeout = value
+            e.control.value = timeout_text()
+            if _is_mounted(e.control):
+                e.control.update()
+            self._timeout_edited(commit=True)
+
+        timeout_field = ft.TextField(
+            label="Timeout (ms)",
+            value=timeout_text(),
+            hint_text=f"{self.time:.0f} (profile time)",
+            on_change=timeout_change,
+            on_blur=timeout_blur,
+            width=LEFT_PANEL_WIDTH,
+            text_size=13,
+            text_style=MONO_TEXT_STYLE,
+            border=ft.InputBorder.OUTLINE,
+            border_width=1.5,
+            border_color=ft.Colors.OUTLINE,
+            focused_border_width=2,
+            focused_border_color=ACCENT_BORDER,
+        )
+
         return ft.Column(
             spacing=10,
             controls=[
@@ -739,6 +1039,41 @@ class MotionAction(RobotAction):
                     size=11,
                     color=ft.Colors.ON_SURFACE_VARIANT,
                 ),
+                _num_field(
+                    "Start speed %",
+                    self.motion.start_speed,
+                    start_speed_apply,
+                    on_commit=start_speed_commit,
+                    width=LEFT_PANEL_WIDTH,
+                ),
+                _num_field(
+                    "End speed %",
+                    self.motion.end_speed,
+                    end_speed_apply,
+                    on_commit=end_speed_commit,
+                    width=LEFT_PANEL_WIDTH,
+                ),
+                ft.Text(
+                    "Speed at the first / final point. Capped by curvature and the "
+                    "first / last curve's max speed; 0 starts from or ends at rest.",
+                    size=11,
+                    color=ft.Colors.ON_SURFACE_VARIANT,
+                ),
+                timeout_field,
+                ft.Text(
+                    "Exported with the profile. Leave blank to use the profile time, "
+                    "or enter inf for no timeout. Doesn't change the simulation.",
+                    size=11,
+                    color=ft.Colors.ON_SURFACE_VARIANT,
+                ),
+                _title_with_divider("Code during motion", TITLE_SIZE_SECTION),
+                ft.Text(
+                    "Runs at the same time as this drive (joined with drive_along). "
+                    "Tab indents, and brackets autocomplete.",
+                    size=11,
+                    color=ft.Colors.ON_SURFACE_VARIANT,
+                ),
+                self.code_editor.build(),
             ],
         )
 
@@ -875,6 +1210,462 @@ class MotionAction(RobotAction):
         return self.build_motion_editor()
 
 
+_CODE_SIZE = 13
+_CODE_PADDING = 12
+# Flutter's editable text reserves cursor width + a 1px gap at line ends.
+_CARET_MARGIN = 3
+# Desktop's compact visual density pulls the TextField's text up by this much
+# relative to its content padding; the highlight layer has to match.
+_FIELD_DENSITY_SHIFT = 4
+_CODE_LINE_RATIO = 1.35
+_CODE_LINE_HEIGHT = _CODE_SIZE * _CODE_LINE_RATIO
+
+CODE_DEFAULT = "#D4D4D4"
+CODE_KEYWORD = "#569CD6"
+CODE_CONTROL = "#C586C0"
+CODE_FUNCTION = "#DCDCAA"
+CODE_TYPE = "#4EC9B0"
+CODE_FIELD = "#9CDCFE"
+CODE_NUMBER = "#B5CEA8"
+CODE_STRING = "#CE9178"
+CODE_COMMENT = "#6A9955"
+CODE_HINT = ft.Colors.with_opacity(0.32, ft.Colors.ON_SURFACE)
+
+_KEYWORDS = {
+    "let", "mut", "fn", "async", "move", "pub", "use", "ref", "const", "static",
+    "struct", "enum", "impl", "trait", "as", "in", "where", "self", "Self",
+    "true", "false", "crate", "super", "mod", "type", "unsafe", "dyn",
+}
+_CONTROL_KEYWORDS = {
+    "if", "else", "for", "while", "loop", "match", "return", "await", "break", "continue",
+}
+
+_TOKEN_RE = re.compile(
+    r"(?P<comment>//[^\n]*|/\*[\s\S]*?(?:\*/|$))"
+    r"|(?P<string>\"(?:\\.|[^\"\\])*\"?)"
+    r"|(?P<number>\b\d[\d_]*(?:\.\d[\d_]*)?(?:[eE][+-]?\d+)?(?:[iuf](?:8|16|32|64|128|size))?\b)"
+    r"|(?P<ident>[A-Za-z_]\w*)"
+)
+
+
+def _ident_color(code: str, start: int, end: int, word: str) -> str:
+    if word in _CONTROL_KEYWORDS:
+        return CODE_CONTROL
+    if word in _KEYWORDS:
+        return CODE_KEYWORD
+    rest = code[end:].lstrip(" \t")
+    if rest.startswith("!"):
+        return CODE_FUNCTION
+    if rest.startswith("(") or rest.startswith("::<"):
+        return CODE_FUNCTION
+    if word[0].isupper():
+        return CODE_TYPE
+    if code[:start].rstrip(" \t").endswith("."):
+        return CODE_FIELD
+    return CODE_DEFAULT
+
+
+def highlight_code(code: str) -> list[tuple[str, str]]:
+    """Split Rust-like code into ``(text, color)`` runs for syntax coloring."""
+    runs: list[tuple[str, str]] = []
+
+    def push(text: str, color: str):
+        if not text:
+            return
+        if runs and runs[-1][1] == color:
+            runs[-1] = (runs[-1][0] + text, color)
+        else:
+            runs.append((text, color))
+
+    pos = 0
+    for match in _TOKEN_RE.finditer(code):
+        push(code[pos : match.start()], CODE_DEFAULT)
+        kind = match.lastgroup
+        text = match.group()
+        if kind == "comment":
+            color = CODE_COMMENT
+        elif kind == "string":
+            color = CODE_STRING
+        elif kind == "number":
+            color = CODE_NUMBER
+        else:
+            color = _ident_color(code, match.start(), match.end(), text)
+        push(text, color)
+        pos = match.end()
+    push(code[pos:], CODE_DEFAULT)
+    return runs
+
+
+class CodeEditor:
+    """Monospace code box with syntax coloring, bracket autocomplete and Tab indenting.
+
+    Flutter text fields cannot color individual characters, so the field's
+    own text is transparent and a colored copy is drawn underneath it.
+
+    ``on_edit(commit)`` fires after each edit; ``commit`` is True on blur / Tab.
+    """
+
+    def __init__(self, get_text, set_text, on_edit, *, hint: str = "", min_lines: int = 8, max_lines: int = 16):
+        self._get_text = get_text
+        self._set_text = set_text
+        self._on_edit = on_edit
+        self.hint = hint
+        self.min_lines = min_lines
+        self.max_lines = max_lines
+        self.on_focus = None
+        self.field: ft.TextField | None = None
+        self._highlight: ft.Text | None = None
+        self._frame: ft.Container | None = None
+        self._scroller: ft.Column | None = None
+        self.focused = False
+        self._blur_at = 0.0
+        self._tab_at = 0.0
+        self._suppress = False
+        self._last_text = get_text()
+        self._caret = len(self._last_text)
+        self._pending_caret: int | None = None
+        self._pending_token = None
+
+    def _store(self, text: str):
+        self._last_text = text
+        self._set_text(text)
+
+    def is_active(self) -> bool:
+        """Focused, or blurred just now by the Tab key that is being handled."""
+        import time
+
+        if self.field is None or not _is_mounted(self.field):
+            return False
+        return self.focused or (time.monotonic() - self._blur_at) < 0.5
+
+    def _spans(self, text: str) -> list[ft.TextSpan]:
+        return [ft.TextSpan(run, style=ft.TextStyle(color=color)) for run, color in highlight_code(text)]
+
+    def _box_height(self, text: str) -> float | None:
+        """Cap the box at ``max_lines``; past that it scrolls."""
+        if text.count("\n") + 1 <= self.max_lines:
+            return None
+        return self.max_lines * _CODE_LINE_HEIGHT + 2 * _CODE_PADDING
+
+    def _refresh_highlight(self, text: str):
+        if self._highlight is not None:
+            self._highlight.spans = self._spans(text)
+            if _is_mounted(self._highlight):
+                self._highlight.update()
+        if self._scroller is not None:
+            height = self._box_height(text)
+            if self._scroller.height != height:
+                self._scroller.height = height
+                if _is_mounted(self._scroller):
+                    self._scroller.update()
+
+    def _set_frame_focus(self, focused: bool):
+        if self._frame is None:
+            return
+        self._frame.border = ft.Border.all(1.5, ACCENT_BORDER if focused else ft.Colors.OUTLINE)
+        if _is_mounted(self._frame):
+            self._frame.update()
+
+    def _apply(self, field: ft.TextField, text: str, caret: int):
+        """Replace the text and place the caret.
+
+        When the value changes, Flutter moves the caret to the end and reports
+        that back, which overwrites any caret sent alongside the value. So the
+        caret is sent only after that report arrives (or a short timeout).
+        """
+        field.value = text
+        field.selection = None
+        if _is_mounted(field):
+            field.update()
+        self._refresh_highlight(text)
+        if caret >= len(text):
+            self._pending_caret = None
+            return
+        self._pending_caret = caret
+        token = object()
+        self._pending_token = token
+
+        async def fallback():
+            import asyncio
+
+            await asyncio.sleep(0.2)
+            if self._pending_token is token and self._pending_caret is not None:
+                self._send_caret(field)
+
+        if field.page is not None:
+            field.page.run_task(fallback)
+
+    def _send_caret(self, field: ft.TextField):
+        caret = self._pending_caret
+        self._pending_caret = None
+        if caret is None or not _is_mounted(field):
+            return
+        self._caret = caret
+        field.selection = ft.TextSelection(base_offset=caret, extent_offset=caret)
+        field.update()
+
+    def _handle_focus(self, e):
+        self.focused = True
+        self._set_frame_focus(True)
+        if self.on_focus is not None:
+            self.on_focus(self)
+
+    def _handle_blur(self, e):
+        import time
+
+        now = time.monotonic()
+        self._blur_at = now
+        # Tab moves focus before Python runs; ignore that blur so it cannot
+        # revert the indent we just inserted.
+        if self._suppress or now - self._tab_at < 0.3:
+            return
+        self.focused = False
+        self._set_frame_focus(False)
+        self._store(e.control.value or "")
+        self._on_edit(True)
+
+    def _handle_selection(self, e):
+        if self._pending_caret is not None:
+            # This is Flutter reporting the caret it jumped to the end.
+            self._send_caret(e.control)
+            return
+        selection = e.control.selection
+        if selection is not None and selection.is_valid:
+            self._caret = selection.extent_offset
+
+    def _handle_change(self, e):
+        new = e.control.value or ""
+        if self._suppress:
+            self._store(new)
+            self._refresh_highlight(new)
+            return
+
+        selection = e.control.selection
+        cursor = None
+        if selection is not None and selection.is_valid:
+            cursor = selection.end
+        updated = transform_code_edit(self._last_text, new, cursor)
+        if updated is None:
+            self._store(new)
+            if cursor is not None:
+                self._caret = cursor
+            self._refresh_highlight(new)
+            self._on_edit(False)
+            return
+
+        text, caret = updated
+        self._suppress = True
+        try:
+            self._store(text)
+            self._caret = caret
+            self._apply(e.control, text, caret)
+        finally:
+            self._suppress = False
+        self._on_edit(False)
+
+    def build(self) -> ft.Control:
+        text = self._get_text()
+        self._last_text = text
+        self._caret = len(text)
+        self.focused = False
+        # Both layers must share identical metrics (the field otherwise inherits
+        # the theme's letter spacing and line height) or the caret drifts.
+        code_style = ft.TextStyle(
+            font_family=MONO_FONT,
+            weight=ft.FontWeight.W_600,
+            size=_CODE_SIZE,
+            height=_CODE_LINE_RATIO,
+            letter_spacing=0,
+            word_spacing=0,
+        )
+        padding = ft.Padding.all(_CODE_PADDING)
+
+        self._highlight = ft.Text(
+            spans=self._spans(text),
+            style=code_style,
+            color=CODE_DEFAULT,
+        )
+        self.field = ft.TextField(
+            value=text,
+            multiline=True,
+            min_lines=self.min_lines,
+            text_size=_CODE_SIZE,
+            text_style=code_style,
+            color=ft.Colors.TRANSPARENT,
+            cursor_color=ft.Colors.ON_SURFACE,
+            hint_text=self.hint or None,
+            hint_style=ft.TextStyle(
+                font_family=MONO_FONT,
+                size=_CODE_SIZE,
+                height=_CODE_LINE_RATIO,
+                letter_spacing=0,
+                color=CODE_HINT,
+            ),
+            content_padding=padding,
+            border=ft.InputBorder.NONE,
+            autocorrect=False,
+            enable_suggestions=False,
+            smart_dashes_type=False,
+            smart_quotes_type=False,
+            capitalization=ft.TextCapitalization.NONE,
+            on_change=self._handle_change,
+            on_focus=self._handle_focus,
+            on_blur=self._handle_blur,
+            on_selection_change=self._handle_selection,
+        )
+        layers = ft.Stack(
+            expand=True,
+            fit=ft.StackFit.PASS_THROUGH,
+            controls=[
+                ft.Container(
+                    padding=ft.Padding.only(
+                        left=_CODE_PADDING,
+                        top=_CODE_PADDING - _FIELD_DENSITY_SHIFT,
+                        right=_CODE_PADDING + _CARET_MARGIN,
+                        bottom=_CODE_PADDING,
+                    ),
+                    content=self._highlight,
+                ),
+                self.field,
+            ],
+        )
+        self._scroller = ft.Column(
+            spacing=0,
+            scroll=ft.ScrollMode.AUTO,
+            height=self._box_height(text),
+            controls=[ft.Row(spacing=0, controls=[layers])],
+        )
+        self._frame = ft.Container(
+            border_radius=6,
+            border=ft.Border.all(1.5, ft.Colors.OUTLINE),
+            bgcolor=ft.Colors.with_opacity(0.25, ft.Colors.BLACK),
+            content=self._scroller,
+        )
+        return self._frame
+
+    def handle_tab(self, shift: bool):
+        """Rewrite the indent and pull focus back onto the box.
+
+        Tab moves focus before Python sees the key, so this runs after the
+        field blurs and then focuses it again.
+        """
+        import time
+
+        field = self.field
+        if field is None:
+            return
+        text = field.value if field.value is not None else self._get_text()
+        text = text or ""
+        cursor = self._caret
+        selection = field.selection
+        if selection is not None and selection.is_valid:
+            cursor = selection.end
+        cursor = max(0, min(cursor, len(text)))
+        new_text, new_cursor = apply_tab_edit(text, cursor, shift=shift)
+
+        self._tab_at = time.monotonic()
+        self._suppress = True
+        self._store(new_text)
+        self._caret = new_cursor
+
+        async def finish():
+            try:
+                await field.focus()
+                self._apply(field, new_text, new_cursor)
+            finally:
+                self._suppress = False
+                self.focused = True
+                self._set_frame_focus(True)
+
+        if field.page is not None:
+            field.page.run_task(finish)
+        else:
+            field.value = new_text
+            self._suppress = False
+        self._on_edit(True)
+
+
+def _code_preview(code: str, limit: int = 42) -> str:
+    for line in code.splitlines():
+        stripped = line.strip()
+        if stripped:
+            return stripped[:limit] + "…" if len(stripped) > limit else stripped
+    return "(empty)"
+
+
+class CodeAction(RobotAction):
+    """Custom robot code plus a wait, run on its own between motions."""
+
+    type_name = "Action"
+    icon = ft.Icons.CODE
+
+    def __init__(self, code: str = "", time: float = 0.0, name: str = "Action"):
+        super().__init__(name, time=max(0.0, float(time)))
+        self.code = code
+        self.action_id = 1
+        self.on_code_change = None
+        self.code_editor = CodeEditor(
+            lambda: self.code,
+            lambda text: setattr(self, "code", text),
+            self._code_edited,
+            hint="action1();",
+        )
+
+    def _code_edited(self, commit: bool):
+        if self.on_code_change is not None:
+            self.on_code_change(self, commit=commit)
+
+    def set_action_id(self, action_id: int):
+        self.action_id = max(1, int(action_id))
+        self.name = f"Action {self.action_id}"
+
+    def _item_body(self) -> ft.Control:
+        return ft.Column(
+            spacing=4,
+            controls=[
+                ft.Text(self.type_name, size=12, color=ft.Colors.ON_SURFACE_VARIANT),
+                ft.Text(
+                    _code_preview(self.code),
+                    size=12,
+                    font_family=MONO_FONT,
+                    max_lines=1,
+                    overflow=ft.TextOverflow.ELLIPSIS,
+                ),
+                _tag_line("Time", f"{self.time:.0f} ms", muted=True),
+            ],
+        )
+
+    def build_editor(self, previous_action) -> ft.Control:
+        def time_apply(v):
+            self.time = max(0.0, float(v))
+            self._notify_change(commit=False)
+
+        def time_commit(v):
+            self.time = max(0.0, float(v))
+            self._notify_change(commit=True)
+
+        return ft.Column(
+            spacing=10,
+            controls=[
+                _title_with_divider("Robot code", TITLE_SIZE_SECTION),
+                ft.Text(
+                    "Runs on its own, after the previous motion finishes. "
+                    "Tab indents, and brackets autocomplete.",
+                    size=11,
+                    color=ft.Colors.ON_SURFACE_VARIANT,
+                ),
+                self.code_editor.build(),
+                _num_field(
+                    "Time (ms)",
+                    self.time,
+                    time_apply,
+                    on_commit=time_commit,
+                    width=120,
+                ),
+            ],
+        )
+
+
 class ActionList:
     def __init__(
         self,
@@ -898,6 +1689,7 @@ class ActionList:
         self.actions: list[RobotAction] = actions_from_json(self.history.current)
         self.selected: RobotAction | None = None
         self._selected_curve: tuple[MotionAction, int] | None = None
+        self._code_focus: CodeEditor | None = None
         self._modal: ft.Container | None = None
         self._timeline = Timeline()
         self._play_time_ms = 0.0
@@ -1025,15 +1817,13 @@ class ActionList:
                 ],
             ),
         )
-        self._actions_section = ft.Container(
-            expand=True,
-            padding=16,
-            border_radius=12,
-            bgcolor=ft.Colors.SURFACE_CONTAINER,
-            border=ft.Border.all(1, ft.Colors.OUTLINE_VARIANT),
+        # The header scrolls with the action list, so a tall editor never
+        # pushes the list off-screen. Reorder indices exclude the header.
+        self._reorder_list.header = ft.Container(
+            padding=ft.Padding.only(bottom=8),
             content=ft.Column(
                 spacing=12,
-                expand=True,
+                tight=True,
                 controls=[
                     ft.Column(
                         spacing=2,
@@ -1045,10 +1835,10 @@ class ActionList:
                     ),
                     self._editor_shell,
                     ft.Divider(),
-                        ft.Row(
+                    ft.Row(
                         spacing=8,
-                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                            controls=[
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        controls=[
                             green_button(
                                 "New action",
                                 icon=ft.Icons.ADD,
@@ -1061,6 +1851,19 @@ class ActionList:
                         ],
                     ),
                     self._save_status,
+                ],
+            ),
+        )
+        self._actions_section = ft.Container(
+            expand=True,
+            padding=16,
+            border_radius=12,
+            bgcolor=ft.Colors.SURFACE_CONTAINER,
+            border=ft.Border.all(1, ft.Colors.OUTLINE_VARIANT),
+            content=ft.Column(
+                spacing=12,
+                expand=True,
+                controls=[
                     ft.Container(expand=True, content=self._reorder_list),
                     self._simulate_bar,
                 ],
@@ -1302,8 +2105,16 @@ class ActionList:
         return [a for a in self.actions if isinstance(a, MotionAction)]
 
     def previous_action(self, action: RobotAction) -> RobotAction | None:
+        """Previous action that establishes a pose.
+
+        Code actions do not move the robot, so they are skipped.
+        """
         idx = self.actions.index(action)
-        return self.actions[idx - 1] if idx > 0 else None
+        for i in range(idx - 1, -1, -1):
+            prev = self.actions[i]
+            if prev.end_pose() is not None:
+                return prev
+        return None
 
     def _motion_index(self, action: RobotAction) -> int:
         motion_idx = 0
@@ -1438,11 +2249,16 @@ class ActionList:
 
     def _propagate_g1_from_action(self, action: RobotAction):
         idx = self.actions.index(action)
-        if idx + 1 >= len(self.actions):
+        pose = action.end_pose()
+        if pose is None:
             return
-        nxt = self.actions[idx + 1]
-        if isinstance(nxt, MotionAction) and nxt.motion.g1_continuity:
-            nxt.motion.enforce_g1(previous_pose=action.end_pose())
+        for nxt in self.actions[idx + 1 :]:
+            if isinstance(nxt, MotionAction):
+                if nxt.motion.g1_continuity:
+                    nxt.motion.enforce_g1(previous_pose=pose)
+                return
+            if nxt.end_pose() is not None:
+                return
 
     def on_canvas_point_drag_end(self, target):
         """Commit a canvas drag: re-profile, refresh timeline/list/editor."""
@@ -1478,6 +2294,10 @@ class ActionList:
             action.on_reorder_curves = self._handle_curve_reorder
             action.on_reorder_curves_start = self._handle_curve_reorder_start
             action.on_reorder_curves_end = self._handle_curve_reorder_end
+            action.on_timeout_change = self._handle_code_change
+        if isinstance(action, (MotionAction, CodeAction)):
+            action.on_code_change = self._handle_code_change
+            action.code_editor.on_focus = self._on_code_focus
 
     def _handle_hover_change(self, action: RobotAction, hovering: bool):
         changed = False
@@ -1495,11 +2315,41 @@ class ActionList:
             action.set_motion_id(i)
             action._list_index = i
 
+    def _renumber_code_actions(self):
+        index = 0
+        for action in self.actions:
+            if isinstance(action, CodeAction):
+                index += 1
+                action.set_action_id(index)
+                action._list_index = index
+
+    def _on_code_focus(self, editor: CodeEditor):
+        self._code_focus = editor
+
+    def handle_keyboard(self, e: ft.KeyboardEvent) -> bool:
+        """Indent the focused code box when Tab is pressed."""
+        key = e.key or ""
+        if key != "Tab" or e.ctrl or e.meta or e.alt:
+            return False
+        editor = self._code_focus
+        if editor is None or not editor.is_active():
+            return False
+        editor.handle_tab(shift=bool(e.shift))
+        return True
+
+    def _handle_code_change(self, action: RobotAction, *, commit: bool = False):
+        # Code and timeouts never change paths or sim timing, so skip
+        # re-profiling, and keep the editor mounted so the field keeps focus.
+        if commit:
+            self.commit_history()
+            self._rebuild_list()
+
     def _rebuild_list(self, *, flush: bool = True):
         self._renumber_motions()
+        self._renumber_code_actions()
         items = []
         for action in self.actions:
-            if not isinstance(action, MotionAction):
+            if not isinstance(action, (MotionAction, CodeAction)):
                 action._list_index = 0
             self._wire_action(action)
             if isinstance(action, MotionAction):
@@ -1510,12 +2360,20 @@ class ActionList:
                     )
                 )
             else:
-                items.append(action.build_list_item(reorderable=False))
+                items.append(action.build_list_item(reorderable=isinstance(action, CodeAction)))
         self._reorder_list.controls = items
         if flush and _is_mounted(self._reorder_list):
             self._reorder_list.update()
 
     def _handle_action_change(self, action: RobotAction, *, commit: bool = False):
+        if isinstance(action, CodeAction):
+            # Wait time changes the simulate clock. Skip re-profiling motions,
+            # and leave the code field mounted (a rebuild would drop focus).
+            self._refresh_timeline(emit_pose=True)
+            if commit:
+                self.commit_history()
+                self._rebuild_list()
+            return
         if isinstance(action, MotionAction) and action.motion.g1_continuity:
             prev = self.previous_action(action)
             pose = prev.end_pose() if prev is not None else None
@@ -1560,15 +2418,27 @@ class ActionList:
     def _next_motion_id(self) -> int:
         return len(self.motion_actions()) + 1
 
+    def _latest_pose(self):
+        for action in reversed(self.actions):
+            pose = action.end_pose()
+            if pose is not None:
+                return pose
+        return None
+
     def _add_motion(self):
-        previous = self.actions[-1] if self.actions else None
-        prev_pose = previous.end_pose() if previous is not None else None
+        prev_pose = self._latest_pose()
         motion = Motion(curves=[Curve(points=default_curve_points(prev_pose))])
         if motion.g1_continuity:
             motion.enforce_g1(previous_pose=prev_pose)
         action = MotionAction(motion, self._next_motion_id())
         self.actions.append(action)
         self.select_curve(action, 0)
+        self.commit_history()
+
+    def _add_code_action(self):
+        action = CodeAction()
+        self.actions.append(action)
+        self.select(action)
         self.commit_history()
 
     def _add_curve(self, motion_action: MotionAction):
@@ -1731,32 +2601,50 @@ class ActionList:
         def close(ev):
             self._close_modal()
 
-        def add_motion(ev):
-            self._close_modal()
-            self._add_motion()
+        def add_kind(kind: str):
+            def handler(ev):
+                self._close_modal()
+                if kind == "Motion":
+                    self._add_motion()
+                else:
+                    self._add_code_action()
 
-        tile = ft.Container(
-            padding=ft.Padding.symmetric(vertical=8),
-            content=ft.Row(
-                spacing=12,
-                controls=[
-                    ft.Icon(ft.Icons.ROUTE),
-                    ft.Column(
-                        spacing=2,
-                        controls=[
-                            ft.Text("Motion", weight=ft.FontWeight.BOLD),
-                            ft.Text(CREATABLE_ACTION_TYPES["Motion"], size=12, color=ft.Colors.ON_SURFACE_VARIANT),
-                        ],
-                    ),
-                ],
-            ),
-            on_click=add_motion,
-            ink=True,
-        )
+            return handler
+
+        icons = {
+            "Motion": ft.Icons.ROUTE,
+            "Action": ft.Icons.CODE,
+        }
+        tiles = [
+            ft.Container(
+                padding=ft.Padding.symmetric(vertical=8),
+                ink=True,
+                on_click=add_kind(kind),
+                content=ft.Row(
+                    spacing=12,
+                    controls=[
+                        ft.Icon(icons.get(kind, ft.Icons.CIRCLE)),
+                        ft.Column(
+                            spacing=2,
+                            tight=True,
+                            controls=[
+                                ft.Text(kind, weight=ft.FontWeight.BOLD),
+                                ft.Text(
+                                    description,
+                                    size=12,
+                                    color=ft.Colors.ON_SURFACE_VARIANT,
+                                ),
+                            ],
+                        ),
+                    ],
+                ),
+            )
+            for kind, description in CREATABLE_ACTION_TYPES.items()
+        ]
 
         self._show_modal(
             "New action",
-            ft.Container(width=300, content=tile),
+            ft.Container(width=300, content=ft.Column(spacing=4, tight=True, controls=tiles)),
             [ft.OutlinedButton("Cancel", on_click=close)],
         )
 

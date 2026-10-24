@@ -4,8 +4,10 @@
     "max_accel": 80.0,
     "track_width": 11.5,
     "length": 15.5,
-    "width": 14.5,
-    "accel_curvature_gain": 2.0
+    "width": 13.5,
+    "accel_curvature_gain": 2.0,
+    "turn_offset_x": 2.0,
+    "turn_offset_y": 0.0
   },
   "code_root": "~/code/vex/override/chroma-temp/src",
   "sd_card_path": "/Volumes/ROBOT_SD",

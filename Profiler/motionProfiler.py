@@ -102,6 +102,8 @@ class MotionProfile:
         resolution: float = 0.1,
         max_speed: float | list[float] = 100,
         reverse: bool = False,
+        end_speed: float = 0.0,
+        start_speed: float = 0.0,
     ):
         self.robot = robot
         self.points = []
@@ -119,6 +121,11 @@ class MotionProfile:
         # Legacy single-value accessors use the most permissive curve speed.
         self.max_speed = max(self.max_speeds) if self.max_speeds else float(max_speed)
         self.reverse = reverse
+        # Percent of robot max speed at the first / final point. These only seed
+        # the forward / backward passes, so curvature, accel, and curve speed
+        # caps still win at the ends.
+        self.start_speed = max(0.0, float(start_speed))
+        self.end_speed = max(0.0, float(end_speed))
     
     def get_max_angular(self, curvature):
         return self.robot.max_speed/(abs(curvature) * self.robot.track_width/2 + 1)
@@ -292,7 +299,7 @@ class MotionProfile:
                 "t": 0,
             })
 
-        previous_speed = 0.0
+        previous_speed = self._speed_cap(self.start_speed)
         for i, point in enumerate(self.profile):
             curvature = self.points[i]["curvature"]
             speed_pct = self.points[i].get("max_speed", self.max_speed)
@@ -316,7 +323,7 @@ class MotionProfile:
             previous_speed = point["lv"]
             point["av"] = curvature * point["lv"]
 
-        previous_speed = 0.0
+        previous_speed = self._speed_cap(self.end_speed)
         next_point = None
         for i in range(len(self.profile) - 1, -1, -1):
             point = self.profile[i]
@@ -429,6 +436,8 @@ def compute_motion_profile(
     robot: Robot | None = None,
     resolution: float = DEFAULT_RESOLUTION,
     name: str = "motion",
+    end_speed: float = 0.0,
+    start_speed: float = 0.0,
 ) -> tuple[list[dict], float]:
     """Profile one or more cubic beziers as a single continuous trajectory."""
     if not curves:
@@ -443,6 +452,8 @@ def compute_motion_profile(
         resolution,
         max_speeds,
         reverse,
+        end_speed,
+        start_speed,
     )
     profile = motion_profile.build_profile()
     return profile, motion_profile.duration_ms
