@@ -5,6 +5,7 @@ use vexide::prelude::*;
 use crate::chassis::Chassis;
 use crate::subsystems::{lift::Lift, intake::Intake};
 use crate::localization::dsr::Dsrs;
+use crate::auto_selector::AutoSelector;
 use vexide::controller::ControllerState;
 pub struct Robot {
     pub chassis: Chassis,
@@ -12,11 +13,12 @@ pub struct Robot {
     pub lift: Lift,
     pub intake: Intake,
     pub dsrs: Dsrs,
+    pub auto_selector: AutoSelector,
 }
 
 impl Robot {
-    pub fn new(chassis: Chassis, controller: Controller, lift: Lift, intake: Intake, dsrs: Dsrs) -> Self {
-        Self { chassis, controller, lift, intake, dsrs }
+    pub fn new(chassis: Chassis, controller: Controller, lift: Lift, intake: Intake, dsrs: Dsrs, auto_selector: AutoSelector) -> Self {
+        Self { chassis, controller, lift, intake, dsrs, auto_selector }
     }
 
     pub async fn op_control(&mut self) {
@@ -24,6 +26,15 @@ impl Robot {
             let controller_state = self.controller.state().unwrap_or_default();
             self.chassis.op_control_tick(&controller_state);
             self.binding(&controller_state);
+            self.auto_selector.tick(&mut self.controller, &controller_state).await;
+            sleep(SLEEP_INTERVAL).await;
+        }
+    }
+
+    pub async fn auto_select_loop(&mut self) {
+        loop {
+            let controller_state = self.controller.state().unwrap_or_default();
+            self.auto_selector.tick(&mut self.controller, &controller_state).await;
             sleep(SLEEP_INTERVAL).await;
         }
     }
@@ -87,8 +98,14 @@ impl Robot {
 }
 
 impl Compete for Robot {
+    async fn disabled(&mut self) {
+        self.auto_select_loop().await;
+    }
+
     async fn autonomous(&mut self) {
-        println!("Autonomous!");
+        let routine = self.auto_selector.selected();
+        println!("Autonomous: {}", routine.name);
+        (routine.run)(self).await;
     }
     async fn driver(&mut self) {
         self.op_control().await;

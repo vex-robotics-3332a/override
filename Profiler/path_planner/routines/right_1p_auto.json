@@ -1,0 +1,159 @@
+{
+  "version": 1,
+  "name": "right_1p_auto",
+  "path": "autos/right_1.rs",
+  "actions": [
+    {
+      "type": "start",
+      "name": "Start",
+      "x": 65.3226,
+      "y": 134.213,
+      "heading": 90.0,
+      "time": 0.0
+    },
+    {
+      "type": "action",
+      "name": "Action 1",
+      "code": "robot.lift.set_wrist_position(Angle::from_degrees(55.0));\nrobot.lift.end_affector_intake();\nrobot.lift.score_at(70.0, 500);\nrobot.chassis.distance_reset(&robot.dsrs.front, Wall::Top).await;",
+      "time": 0.0
+    },
+    {
+      "type": "motion",
+      "id": 1,
+      "g1_continuity": true,
+      "start_speed": 20.0,
+      "end_speed": 20.0,
+      "curves": [
+        {
+          "points": [
+            [
+              65.3226,
+              134.213
+            ],
+            [
+              65.3226,
+              135.713
+            ],
+            [
+              65.3226,
+              136.43362341772152
+            ],
+            [
+              65.3226,
+              138.5
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": false
+        }
+      ],
+      "code": "",
+      "timeout": null
+    },
+    {
+      "type": "motion",
+      "id": 2,
+      "g1_continuity": true,
+      "start_speed": 20.0,
+      "end_speed": 20.0,
+      "curves": [
+        {
+          "points": [
+            [
+              65.3226,
+              138.5
+            ],
+            [
+              65.3226,
+              134.6729496961032
+            ],
+            [
+              65.3226,
+              133.5
+            ],
+            [
+              65.3226,
+              131.5
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": true
+        }
+      ],
+      "code": "",
+      "timeout": null
+    },
+    {
+      "type": "motion",
+      "id": 3,
+      "g1_continuity": true,
+      "start_speed": 20.0,
+      "end_speed": 20.0,
+      "curves": [
+        {
+          "points": [
+            [
+              65.3226,
+              131.5
+            ],
+            [
+              65.3226,
+              135.93241627428614
+            ],
+            [
+              65.3226,
+              136.5
+            ],
+            [
+              65.3226,
+              138.5
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": false
+        }
+      ],
+      "code": "",
+      "timeout": null
+    },
+    {
+      "type": "motion",
+      "id": 4,
+      "g1_continuity": true,
+      "start_speed": 20.0,
+      "end_speed": 30.0,
+      "curves": [
+        {
+          "points": [
+            [
+              65.3226,
+              138.5
+            ],
+            [
+              65.3226,
+              134.6729496961032
+            ],
+            [
+              65.05276898734178,
+              129.79865506329114
+            ],
+            [
+              54.222151898734175,
+              122.11590189873418
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": true
+        }
+      ],
+      "code": "",
+      "timeout": 1400.0
+    },
+    {
+      "type": "action",
+      "name": "Action 2",
+      "code": "robot.lift.drop_stack();\nrobot.lift.wait_for_macro().await;",
+      "time": 0.0
+    }
+  ]
+}

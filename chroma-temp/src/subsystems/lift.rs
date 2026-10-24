@@ -251,7 +251,7 @@ impl Cascade {
     }
 
     pub fn retract(&mut self) {
-        self.motors.iter_mut().for_each(|motor| motor.set_voltage(-motor.max_voltage()).unwrap_or_default());
+        self.motors.iter_mut().for_each(|motor| motor.set_voltage(-5.0).unwrap_or_default());
     }
 
     pub fn stop(&mut self) {

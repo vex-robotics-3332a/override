@@ -1,0 +1,405 @@
+{
+  "version": 1,
+  "name": "left_3p_auto",
+  "path": "autos/left_3.rs",
+  "actions": [
+    {
+      "type": "start",
+      "name": "Start",
+      "x": 65.64256042296071,
+      "y": 10.971865558912388,
+      "heading": 270.0,
+      "time": 0.0
+    },
+    {
+      "type": "action",
+      "name": "Action 1",
+      "code": "robot.lift.set_wrist_position(Angle::from_degrees(55.0));\nrobot.lift.end_affector_intake();\nrobot.lift.score_at(0.0, 500);\nrobot.chassis.distance_reset(&robot.dsrs.front, Wall::Bottom).await;",
+      "time": 0.0
+    },
+    {
+      "type": "motion",
+      "id": 1,
+      "g1_continuity": true,
+      "start_speed": 20.0,
+      "end_speed": 30.0,
+      "curves": [
+        {
+          "points": [
+            [
+              65.64256042296071,
+              10.971865558912388
+            ],
+            [
+              65.64256042296071,
+              7.348753776435046
+            ],
+            [
+              65.6426,
+              5.268693353474321
+            ],
+            [
+              65.6426,
+              2.728663141993958
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": false
+        }
+      ],
+      "code": "",
+      "timeout": null
+    },
+    {
+      "type": "motion",
+      "id": 2,
+      "g1_continuity": true,
+      "start_speed": 20.0,
+      "end_speed": 20.0,
+      "curves": [
+        {
+          "points": [
+            [
+              65.6426,
+              2.728663141993958
+            ],
+            [
+              65.6426,
+              5.0
+            ],
+            [
+              65.6426,
+              7.0
+            ],
+            [
+              65.6426,
+              10.9719
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": true
+        }
+      ],
+      "code": "",
+      "timeout": null
+    },
+    {
+      "type": "motion",
+      "id": 3,
+      "g1_continuity": true,
+      "start_speed": 20.0,
+      "end_speed": 30.0,
+      "curves": [
+        {
+          "points": [
+            [
+              65.6426,
+              10.9719
+            ],
+            [
+              65.6426,
+              4.9719
+            ],
+            [
+              65.6426,
+              0.0
+            ],
+            [
+              65.6426,
+              0.0
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": false
+        }
+      ],
+      "code": "",
+      "timeout": null
+    },
+    {
+      "type": "action",
+      "name": "Action 2",
+      "code": "robot.chassis.distance_reset(&robot.dsrs.front, Wall::Bottom).await;",
+      "time": 0.0
+    },
+    {
+      "type": "motion",
+      "id": 4,
+      "g1_continuity": true,
+      "start_speed": 20.0,
+      "end_speed": 10.0,
+      "curves": [
+        {
+          "points": [
+            [
+              65.6426,
+              0.0
+            ],
+            [
+              65.6426,
+              14.012651057401815
+            ],
+            [
+              60.2549093655589,
+              17.077228096676738
+            ],
+            [
+              53.73546072507553,
+              21.616314199395774
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": true
+        }
+      ],
+      "code": "",
+      "timeout": 1500.0
+    },
+    {
+      "type": "action",
+      "name": "Action 3",
+      "code": "robot.lift.end_affector_outtake();\nsleep(Duration::from_millis(300)).await;\nrobot.lift.score_at(240.0, 500);\n",
+      "time": 300.0
+    },
+    {
+      "type": "motion",
+      "id": 5,
+      "g1_continuity": true,
+      "start_speed": 20.0,
+      "end_speed": 20.0,
+      "curves": [
+        {
+          "points": [
+            [
+              53.73546072507553,
+              21.616314199395774
+            ],
+            [
+              57.68637662808273,
+              18.865537491532642
+            ],
+            [
+              64.0995090634441,
+              19.279078549848943
+            ],
+            [
+              70.91012084592144,
+              19.527756797583084
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": false
+        }
+      ],
+      "code": "sleep(Duration::from_millis(100)).await;\nrobot.chassis.distance_reset(&robot.dsrs.right, Wall::Bottom).await;",
+      "timeout": null
+    },
+    {
+      "type": "action",
+      "name": "Action 4",
+      "code": "robot.chassis.distance_reset(&robot.dsrs.right, Wall::Bottom).await;",
+      "time": 0.0
+    },
+    {
+      "type": "motion",
+      "id": 6,
+      "g1_continuity": true,
+      "start_speed": 20.0,
+      "end_speed": 0.0,
+      "curves": [
+        {
+          "points": [
+            [
+              70.91012084592144,
+              19.527756797583084
+            ],
+            [
+              66.4803302862985,
+              19.3660103070504
+            ],
+            [
+              55.76724683544303,
+              34.35735759493671
+            ],
+            [
+              52.269066455696205,
+              40.995569620253164
+            ]
+          ],
+          "max_speed": 80.0,
+          "reversed": true
+        }
+      ],
+      "code": "",
+      "timeout": null
+    },
+    {
+      "type": "action",
+      "name": "Action 5",
+      "code": "sleep(Duration::from_millis(100)).await;\nrobot.lift.pin_grab();\nrobot.lift.wait_for_macro().await;\n",
+      "time": 400.0
+    },
+    {
+      "type": "motion",
+      "id": 7,
+      "g1_continuity": false,
+      "start_speed": 20.0,
+      "end_speed": 40.0,
+      "curves": [
+        {
+          "points": [
+            [
+              52.269066455696205,
+              40.995569620253164
+            ],
+            [
+              49.503398791540775,
+              49.76567220543807
+            ],
+            [
+              41.203549848942586,
+              48.97148791540786
+            ],
+            [
+              46.8727341389728,
+              30.717711480362542
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": true
+        }
+      ],
+      "code": "sleep(Duration::from_millis(200)).await;\nrobot.lift.score_at(240.0, 2000);",
+      "timeout": 1600.0
+    },
+    {
+      "type": "action",
+      "name": "Action 6",
+      "code": "sleep(Duration::from_millis(100)).await;\nrobot.lift.drop_stack();\nrobot.lift.wait_for_macro().await;\n",
+      "time": 500.0
+    },
+    {
+      "type": "action",
+      "name": "Action 7",
+      "code": "robot.chassis.distance_reset(&robot.dsrs.left, Wall::Left).await;",
+      "time": 0.0
+    },
+    {
+      "type": "motion",
+      "id": 8,
+      "g1_continuity": true,
+      "start_speed": 0.0,
+      "end_speed": 0.0,
+      "curves": [
+        {
+          "points": [
+            [
+              46.8727341389728,
+              30.717711480362542
+            ],
+            [
+              45.28013912914874,
+              35.84558733933242
+            ],
+            [
+              42.23508308157099,
+              36.623111782477345
+            ],
+            [
+              31.553247734138964,
+              35.94108761329306
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": false
+        }
+      ],
+      "code": "sleep(Duration::from_millis(300)).await;\nrobot.lift.score_at(250.0, 2000);",
+      "timeout": null
+    },
+    {
+      "type": "action",
+      "name": "Action 8",
+      "code": "robot.chassis.distance_reset(&robot.dsrs.front, Wall::Left).await;\nrobot.chassis.distance_reset(&robot.dsrs.left, Wall::Bottom).await;",
+      "time": 0.0
+    },
+    {
+      "type": "motion",
+      "id": 9,
+      "g1_continuity": true,
+      "start_speed": 0.0,
+      "end_speed": 0.0,
+      "curves": [
+        {
+          "points": [
+            [
+              31.553247734138964,
+              35.94108761329306
+            ],
+            [
+              37.13969698343743,
+              36.29777663573328
+            ],
+            [
+              32.56376582278481,
+              31.806882911392407
+            ],
+            [
+              28.08512658227848,
+              28.392721518987344
+            ]
+          ],
+          "max_speed": 70.0,
+          "reversed": true
+        }
+      ],
+      "code": "",
+      "timeout": null
+    },
+    {
+      "type": "action",
+      "name": "Action 9",
+      "code": "robot.lift.pin_grab();\nsleep(Duration::from_millis(600)).await;\nrobot.lift.score_at(430.0, 800);",
+      "time": 600.0
+    },
+    {
+      "type": "motion",
+      "id": 10,
+      "g1_continuity": true,
+      "start_speed": 30.0,
+      "end_speed": 25.0,
+      "curves": [
+        {
+          "points": [
+            [
+              28.08512658227848,
+              28.392721518987344
+            ],
+            [
+              19.456935191878017,
+              21.815268781790166
+            ],
+            [
+              26.561555891238655,
+              16.485271903323266
+            ],
+            [
+              41.60577531645569,
+              22.706487341772153
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": true
+        }
+      ],
+      "code": "",
+      "timeout": 1500.0
+    },
+    {
+      "type": "action",
+      "name": "Action 10",
+      "code": "sleep(Duration::from_millis(300)).await;\nrobot.lift.drop_stack();\t\nrobot.lift.wait_for_macro().await;",
+      "time": 0.0
+    }
+  ]
+}

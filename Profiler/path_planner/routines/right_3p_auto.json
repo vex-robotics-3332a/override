@@ -14,7 +14,7 @@
     {
       "type": "action",
       "name": "Action 1",
-      "code": "robot.lift.set_wrist_position(Angle::from_degrees(60.0));\nrobot.lift.end_affector_intake();\nrobot.lift.score_at(0.0, 500);\nrobot.chassis.distance_reset(&robot.dsrs.front, Wall::Left).await;",
+      "code": "robot.lift.set_wrist_position(Angle::from_degrees(55.0));\nrobot.lift.end_affector_intake();\nrobot.lift.score_at(0.0, 500);\nrobot.chassis.distance_reset(&robot.dsrs.front, Wall::Left).await;",
       "time": 0.0
     },
     {
@@ -84,6 +84,12 @@
       "timeout": null
     },
     {
+      "type": "action",
+      "name": "Action 2",
+      "code": "robot.chassis.distance_reset(&robot.dsrs.left, Wall::Bottom).await;",
+      "time": 0.0
+    },
+    {
       "type": "motion",
       "id": 3,
       "g1_continuity": true,
@@ -118,7 +124,7 @@
     },
     {
       "type": "action",
-      "name": "Action 2",
+      "name": "Action 3",
       "code": "robot.chassis.distance_reset(&robot.dsrs.front, Wall::Left).await;",
       "time": 0.0
     },
@@ -153,11 +159,11 @@
         }
       ],
       "code": "",
-      "timeout": 1200.0
+      "timeout": 1500.0
     },
     {
       "type": "action",
-      "name": "Action 3",
+      "name": "Action 4",
       "code": "robot.lift.end_affector_outtake();\nsleep(Duration::from_millis(300)).await;\nrobot.lift.score_at(240.0, 500);\n",
       "time": 300.0
     },
@@ -196,7 +202,7 @@
     },
     {
       "type": "action",
-      "name": "Action 4",
+      "name": "Action 5",
       "code": "robot.chassis.distance_reset(&robot.dsrs.left, Wall::Left).await;",
       "time": 0.0
     },
@@ -218,12 +224,12 @@
               64.14814385546431
             ],
             [
-              34.783799093655595,
-              58.26718277945619
+              33.59335443037975,
+              55.730933544303795
             ],
             [
-              42.65936555891239,
-              51.39539274924471
+              40.334810126582276,
+              51.71511075949367
             ]
           ],
           "max_speed": 80.0,
@@ -235,8 +241,8 @@
     },
     {
       "type": "action",
-      "name": "Action 5",
-      "code": "robot.lift.pin_grab();\nsleep(Duration::from_millis(600)).await;\nrobot.lift.score_at(240.0, 2000);\n",
+      "name": "Action 6",
+      "code": "sleep(Duration::from_millis(100)).await;\nrobot.lift.pin_grab();\nrobot.lift.wait_for_macro().await;\n",
       "time": 400.0
     },
     {
@@ -244,13 +250,13 @@
       "id": 7,
       "g1_continuity": false,
       "start_speed": 20.0,
-      "end_speed": 30.0,
+      "end_speed": 40.0,
       "curves": [
         {
           "points": [
             [
-              42.65936555891239,
-              51.39539274924471
+              40.334810126582276,
+              51.71511075949367
             ],
             [
               49.76567220543807,
@@ -269,18 +275,18 @@
           "reversed": true
         }
       ],
-      "code": "",
+      "code": "sleep(Duration::from_millis(200)).await;\nrobot.lift.score_at(240.0, 2000);",
       "timeout": 1600.0
     },
     {
       "type": "action",
-      "name": "Action 6",
-      "code": "robot.lift.drop_stack();\nsleep(Duration::from_millis(500)).await;\n",
+      "name": "Action 7",
+      "code": "sleep(Duration::from_millis(100)).await;\nrobot.lift.drop_stack();\nrobot.lift.wait_for_macro().await;\n",
       "time": 500.0
     },
     {
       "type": "action",
-      "name": "Action 7",
+      "name": "Action 8",
       "code": "robot.chassis.distance_reset(&robot.dsrs.right, Wall::Bottom).await;",
       "time": 0.0
     },
@@ -314,12 +320,12 @@
           "reversed": false
         }
       ],
-      "code": "sleep(Duration::from_millis(300)).await;\nrobot.lift.score_at(300.0, 2000);",
+      "code": "sleep(Duration::from_millis(300)).await;\nrobot.lift.score_at(250.0, 2000);",
       "timeout": null
     },
     {
       "type": "action",
-      "name": "Action 8",
+      "name": "Action 9",
       "code": "robot.chassis.distance_reset(&robot.dsrs.front, Wall::Bottom).await;\nrobot.chassis.distance_reset(&robot.dsrs.right, Wall::Left).await;",
       "time": 0.0
     },
@@ -345,8 +351,8 @@
               32.128209969788514
             ],
             [
-              29.113481873111784,
-              28.71355740181268
+              28.57143987341772,
+              28.17840189873418
             ]
           ],
           "max_speed": 70.0,
@@ -358,7 +364,7 @@
     },
     {
       "type": "action",
-      "name": "Action 9",
+      "name": "Action 10",
       "code": "robot.lift.pin_grab();\nsleep(Duration::from_millis(600)).await;\nrobot.lift.score_at(430.0, 800);",
       "time": 600.0
     },
@@ -367,25 +373,25 @@
       "id": 10,
       "g1_continuity": true,
       "start_speed": 30.0,
-      "end_speed": 20.0,
+      "end_speed": 25.0,
       "curves": [
         {
           "points": [
             [
-              29.113481873111784,
-              28.71355740181268
+              28.57143987341772,
+              28.17840189873418
             ],
             [
-              21.409901173112967,
-              20.1295960303002
+              21.429389983673218,
+              20.110930742127792
             ],
             [
               16.485271903323266,
               26.561555891238655
             ],
             [
-              22.846676737160124,
-              43.21223564954681
+              23.24121835443038,
+              42.44454113924051
             ]
           ],
           "max_speed": 100.0,
@@ -393,12 +399,12 @@
         }
       ],
       "code": "",
-      "timeout": 1400.0
+      "timeout": 1500.0
     },
     {
       "type": "action",
-      "name": "Action 10",
-      "code": "robot.lift.drop_stack();\t",
+      "name": "Action 11",
+      "code": "sleep(Duration::from_millis(300)).await;\nrobot.lift.drop_stack();\t\nrobot.lift.wait_for_macro().await;",
       "time": 0.0
     }
   ]

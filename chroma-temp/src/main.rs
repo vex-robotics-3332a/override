@@ -157,19 +157,16 @@ async fn main(peripherals: Peripherals) {
     let lift = Lift::new(cascade, wrist, end_affector);
     let intake = Intake::new(Motor::new(peripherals.port_10, Gearset::Blue, Direction::Forward));
     let dsrs = Dsrs { left: left_dsr, front: front_dsr, right: right_dsr };
-    let mut robot = Robot::new(chassis, controller, lift, intake, dsrs);
-
     let mut auto_selector = AutoSelector::new(AUTOS);
+    auto_selector.select("Right 3");
 
-    auto_selector.select("Right 1");
+    let mut robot = Robot::new(chassis, controller, lift, intake, dsrs, auto_selector);
     
     /* Task Spawning */
 
     robot.chassis.init().await;
 
     robot.chassis.set_brake_mode(BrakeMode::Brake);
-
-    auto_selector.run(&mut robot).await;
 
     robot.compete().await;
 }
