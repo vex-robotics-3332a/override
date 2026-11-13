@@ -124,8 +124,8 @@ async fn main(peripherals: Peripherals) {
 
     /* misc */
     let controller = peripherals.primary_controller;
-    let lift_motor_a = Motor::new(peripherals.port_20, Gearset::Green, Direction::Forward);
-    let lift_motor_b = Motor::new(peripherals.port_11, Gearset::Green, Direction::Reverse);
+    let lift_motor_a = Motor::new(peripherals.port_1, Gearset::Green, Direction::Forward);
+    let lift_motor_b = Motor::new(peripherals.port_10, Gearset::Green, Direction::Reverse);
 
     /* lift */
     let cascade = Cascade::new(
@@ -155,12 +155,11 @@ async fn main(peripherals: Peripherals) {
             f64::INFINITY), 
         BrakeMode::Hold);
     let lift = Lift::new(cascade, wrist, end_affector);
-    let intake = Intake::new(Motor::new(peripherals.port_10, Gearset::Blue, Direction::Forward));
     let dsrs = Dsrs { left: left_dsr, front: front_dsr, right: right_dsr };
     let mut auto_selector = AutoSelector::new(AUTOS);
     auto_selector.select("Right 3");
 
-    let mut robot = Robot::new(chassis, controller, lift, intake, dsrs, auto_selector);
+    let mut robot = Robot::new(chassis, controller, lift, dsrs, auto_selector);
     
     /* Task Spawning */
 

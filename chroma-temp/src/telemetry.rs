@@ -1,4 +1,6 @@
+use alloc::collections::BTreeMap;
 use alloc::rc::{Rc, Weak};
+use core::cell::RefCell;
 use core::fmt::Write as FmtWrite;
 use std::fmt::Display;
 use std::fs::File;
@@ -32,11 +34,34 @@ impl TelemetryState {
     }
 }
 
+#[derive(Clone)]
 pub struct TelemetryFile {
     state: Rc<Mutex<TelemetryState>>,
 }
 
+thread_local! {
+    /// Named files stay open for the whole program so every caller appends to the same file.
+    static NAMED: RefCell<BTreeMap<String, TelemetryFile>> = RefCell::new(BTreeMap::new());
+}
+
 impl TelemetryFile {
+    /// Creates (or truncates) `path` with a CSV header and registers it so `telemetry!("path", ...)` appends to it.
+    pub fn register(path: &str, columns: &[&str]) {
+        let file = Self::new_csv(path, columns, Self::DEFAULT_BUFFER_SIZE, Self::DEFAULT_ITER_TIMEOUT);
+        NAMED.with(|named| named.borrow_mut().insert(path.to_string(), file));
+    }
+
+    /// Returns the registered file, creating a headerless one on first use.
+    pub fn named(path: &str) -> TelemetryFile {
+        NAMED.with(|named| {
+            named
+                .borrow_mut()
+                .entry(path.to_string())
+                .or_insert_with(|| Self::new_csv(path, &[], Self::DEFAULT_BUFFER_SIZE, Self::DEFAULT_ITER_TIMEOUT))
+                .clone()
+        })
+    }
+
     pub const DEFAULT_BUFFER_SIZE: usize = 4096;
     pub const DEFAULT_ITER_TIMEOUT: usize = 30;
 
@@ -132,9 +157,13 @@ impl TelemetryFile {
     }
 }
 
-/// Log one CSV row. Usage: `telemetry!(ct_e, time, error);`
+/// Log one CSV row. Usage: `telemetry!(ct_e, time, error);` or `telemetry!("desired_pose.txt", time, x, y);`
 #[macro_export]
 macro_rules! telemetry {
+    ($name:literal $(, $val:expr)* $(,)?) => {
+        $crate::telemetry::TelemetryFile::named($name)
+            .write(vec![$(::alloc::string::ToString::to_string(&$val)),*])
+    };
     ($file:expr $(, $val:expr)* $(,)?) => {
         $file.write(vec![$(::alloc::string::ToString::to_string(&$val)),*])
     };

@@ -5,6 +5,7 @@ use crate::subsystems::*;
 use vexide::math::*;
 use vexide::prelude::*;
 use alloc::rc::Rc;
+use core::time::Duration;
 use crate::helpers::*;
 use crate::motion_control::ramsete::*;
 use crate::localization::dsr::Wall;
@@ -20,9 +21,7 @@ pub async fn run(robot: &mut Robot) {
 robot.chassis.distance_reset(&robot.dsrs.left, Wall::Right).await;
 
 	let mut motion2 = MotionProfile::new("test/motion2.json");
-	join(robot.chassis.drive_along(&mut motion2), async {
-		robot.intake.toggle();
-	}).await;
+	robot.chassis.drive_along(&mut motion2).await;
 
 robot.chassis.distance_reset(&robot.dsrs.left, Wall::Bottom).await;
 

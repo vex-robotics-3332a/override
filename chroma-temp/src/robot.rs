@@ -3,7 +3,7 @@ use std::time::Duration;
 use crate::SLEEP_INTERVAL;
 use vexide::prelude::*;
 use crate::chassis::Chassis;
-use crate::subsystems::{lift::Lift, intake::Intake};
+use crate::subsystems::lift::Lift;
 use crate::localization::dsr::Dsrs;
 use crate::auto_selector::AutoSelector;
 use vexide::controller::ControllerState;
@@ -11,14 +11,13 @@ pub struct Robot {
     pub chassis: Chassis,
     pub controller: Controller,
     pub lift: Lift,
-    pub intake: Intake,
     pub dsrs: Dsrs,
     pub auto_selector: AutoSelector,
 }
 
 impl Robot {
-    pub fn new(chassis: Chassis, controller: Controller, lift: Lift, intake: Intake, dsrs: Dsrs, auto_selector: AutoSelector) -> Self {
-        Self { chassis, controller, lift, intake, dsrs, auto_selector }
+    pub fn new(chassis: Chassis, controller: Controller, lift: Lift, dsrs: Dsrs, auto_selector: AutoSelector) -> Self {
+        Self { chassis, controller, lift, dsrs, auto_selector }
     }
 
     pub async fn op_control(&mut self) {
@@ -40,11 +39,6 @@ impl Robot {
     }
 
     pub fn binding(&mut self, controller_state: &ControllerState) {
-        //intake
-        if controller_state.button_r1.is_now_pressed() {
-            self.intake.toggle();
-        }
-
         let macro_running = self.lift.macro_running();
 
         // Manual lift control is disabled while a macro holds the subsystems (avoids wrist_stop fighting PID).
