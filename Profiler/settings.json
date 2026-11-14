@@ -9,7 +9,7 @@
     "turn_offset_x": 2.0,
     "turn_offset_y": 0.0
   },
-  "code_root": "~/code/override/chroma-temp/src",
+  "code_root": "~/code/vex/override/chroma-temp/src",
   "sd_card_path": "/Volumes/ROBOT_SD",
   "field_background": "skills"
 }

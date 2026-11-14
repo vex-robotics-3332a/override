@@ -56,37 +56,37 @@ impl Robot {
                 self.lift.cascade_stop();
             }
 
-            //wrist
-            if controller_state.button_down.is_now_pressed() {
-                self.lift.wrist_down();
-            }
+        //     //wrist
+        //     if controller_state.button_down.is_now_pressed() {
+        //         self.lift.wrist_down();
+        //     }
 
-            if controller_state.button_up.is_now_pressed() {
-                self.lift.wrist_up();
-            }
+        //     if controller_state.button_up.is_now_pressed() {
+        //         self.lift.wrist_up();
+        //     }
 
-            if !controller_state.button_down.is_pressed() && !controller_state.button_up.is_pressed() {
-                self.lift.wrist_stop();
-            }
+        //     if !controller_state.button_down.is_pressed() && !controller_state.button_up.is_pressed() {
+        //         self.lift.wrist_stop();
+        //     }
 
-            //end affector
-            if controller_state.button_y.is_now_pressed() {
-                self.lift.end_affector_stop();
-            }
+        //     //end affector
+        //     if controller_state.button_y.is_now_pressed() {
+        //         self.lift.end_affector_stop();
+        //     }
 
-        }
+        // }
 
-        // macros
-        if controller_state.button_x.is_now_pressed() {
-            self.lift.score_position();
-        }
+        // // macros
+        // if controller_state.button_x.is_now_pressed() {
+        //     self.lift.score_position();
+        // }
 
-        if controller_state.button_r2.is_now_pressed() {
-            self.lift.intake_position();
-        }
+        // if controller_state.button_r2.is_now_pressed() {
+        //     self.lift.intake_position();
+        // }
 
-        if controller_state.button_a.is_now_pressed() {
-            self.lift.drop_stack();
+        // if controller_state.button_a.is_now_pressed() {
+        //     self.lift.drop_stack();
         }
     }
 }

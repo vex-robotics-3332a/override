@@ -139,22 +139,8 @@ async fn main(peripherals: Peripherals) {
             3.0, 
             f64::INFINITY), 
         BrakeMode::Hold);
-    let end_affector = EndAffector::new(
-        Motor::new_exp(peripherals.port_2, Direction::Forward), 
-        BrakeMode::Hold);
-    let wrist = Wrist::new(
-        Motor::new_exp(peripherals.port_3, Direction::Forward), 
-        12.0/48.0, 
-        PIDController::new(
-            0.4, 
-            0.0, 
-            0.03, 
-            f64::INFINITY, 
-            8.0, 
-            1.5, 
-            f64::INFINITY), 
-        BrakeMode::Hold);
-    let lift = Lift::new(cascade, wrist, end_affector);
+    let claw = Claw::new(AdiDigitalOut::new(peripherals.adi_a));
+    let lift = Lift::new(cascade, claw);
     let dsrs = Dsrs { left: left_dsr, front: front_dsr, right: right_dsr };
     let mut auto_selector = AutoSelector::new(AUTOS);
     auto_selector.select("Right 3");

@@ -80,7 +80,7 @@
           "reversed": true
         }
       ],
-      "code": "robot.intake.toggle();\n",
+      "code": "",
       "timeout": null
     },
     {

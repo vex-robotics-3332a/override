@@ -17,27 +17,27 @@ pub struct AutoRoutine {
 }
 
 // Closures can't express the higher-ranked lifetime on the boxed future, so each routine needs a named wrapper.
-fn left_3(robot: &mut Robot) -> LocalBoxFuture<'_, ()> {
-    Box::pin(autos::left_3::run(robot))
-}
+// fn left_3(robot: &mut Robot) -> LocalBoxFuture<'_, ()> {
+//     Box::pin(autos::left_3::run(robot))
+// }
 
-fn right_3(robot: &mut Robot) -> LocalBoxFuture<'_, ()> {
-    Box::pin(autos::right_3::run(robot))
-}
+// fn right_3(robot: &mut Robot) -> LocalBoxFuture<'_, ()> {
+//     Box::pin(autos::right_3::run(robot))
+// }
 
-fn left_1(robot: &mut Robot) -> LocalBoxFuture<'_, ()> {
-    Box::pin(autos::left_1::run(robot))
-}
+// fn left_1(robot: &mut Robot) -> LocalBoxFuture<'_, ()> {
+//     Box::pin(autos::left_1::run(robot))
+// }
 
-fn right_1(robot: &mut Robot) -> LocalBoxFuture<'_, ()> {
-    Box::pin(autos::right_1::run(robot))
+// fn right_1(robot: &mut Robot) -> LocalBoxFuture<'_, ()> {
+//     Box::pin(autos::right_1::run(robot))
+// }
+fn test(robot: &mut Robot) -> LocalBoxFuture<'_, ()> {
+        Box::pin(autos::test::run(robot))
 }
 
 pub const AUTOS: &[AutoRoutine] = &[
-    AutoRoutine { name: "Left 3", run: left_3 },
-    AutoRoutine { name: "Right 3", run: right_3 },
-    AutoRoutine { name: "Left 1", run: left_1 },
-    AutoRoutine { name: "Right 1", run: right_1 },
+    AutoRoutine { name: "Test", run: test },
 ];
 
 pub struct AutoSelector {
