@@ -32,7 +32,7 @@ use std::fs::*;
 use std::io::{Result, Write};
 use std::time::*;
 use motion_control::pid::PIDController;
-
+use subsystems::toggles::Toggle;
 use crate::auto_selector::{AutoSelector, AUTOS};
 use crate::chassis::Chassis;
 use crate::localization::localization::Localization;
@@ -86,13 +86,23 @@ async fn main(peripherals: Peripherals) {
     )));
 
     /* LOCALIZATION */
+
+    let vertical_encoder = TrackingPod::new(
+        RotationSensor::new(peripherals.port_20, Direction::Forward),
+        2.0,
+        -0.5,
+        false,
+        1.0
+    );
     let odometry: Odometry = Odometry::new(
-        Box::new(Rc::clone(&drivetrain)),
+        Box::new(vertical_encoder),
         Box::new(NullPod::new()));
-    let imu = InertialSensor::new(peripherals.port_17);
+
+    let imu = InertialSensor::new(peripherals.port_14);
+
     let left_dsr = Dsr::new(
-        DistanceSensor::new(peripherals.port_5),
-        Pose::new(2.25, 6.4375, Angle::from_degrees(90.0)),
+        DistanceSensor::new(peripherals.port_3),
+        Pose::new(-0.25, 8.618, Angle::from_degrees(90.0)),
         0.0
     );
     let front_dsr = Dsr::new(
@@ -101,8 +111,13 @@ async fn main(peripherals: Peripherals) {
         0.0
     );
     let right_dsr = Dsr::new(
-        DistanceSensor::new(peripherals.port_21),
-        Pose::new(2.25, -6.4375, Angle::from_degrees(270.0)),
+        DistanceSensor::new(peripherals.port_7),
+        Pose::new(-0.25, -8.618, Angle::from_degrees(270.0)),
+        0.0
+    );
+    let back_dsr = Dsr::new(
+        DistanceSensor::new(peripherals.port_8),
+        Pose::new(2.25, -6.4375, Angle::from_degrees(180.0)),
         0.0
     );
     
@@ -124,12 +139,15 @@ async fn main(peripherals: Peripherals) {
 
     /* misc */
     let controller = peripherals.primary_controller;
+
     let lift_motor_a = Motor::new(peripherals.port_1, Gearset::Green, Direction::Forward);
     let lift_motor_b = Motor::new(peripherals.port_10, Gearset::Green, Direction::Reverse);
+    let lift_motor_c = Motor::new(peripherals.port_9, Gearset::Green, Direction::Forward);
 
     /* lift */
+    let lift_encoder = RotationSensor::new(peripherals.port_2, Direction::Forward);
     let cascade = Cascade::new(
-        vec![lift_motor_a, lift_motor_b], 
+        vec![lift_motor_a, lift_motor_b, lift_motor_c], 
         PIDController::new(
             0.6, 
             0.0, 
@@ -138,14 +156,17 @@ async fn main(peripherals: Peripherals) {
             12.0, 
             3.0, 
             f64::INFINITY), 
+        lift_encoder,
         BrakeMode::Hold);
     let claw = Claw::new(AdiDigitalOut::new(peripherals.adi_a));
     let lift = Lift::new(cascade, claw);
-    let dsrs = Dsrs { left: left_dsr, front: front_dsr, right: right_dsr };
-    let mut auto_selector = AutoSelector::new(AUTOS);
-    auto_selector.select("Right 3");
+    let dsrs = Dsrs { left: left_dsr, front: front_dsr, right: right_dsr, back: back_dsr};
+    let toggle = Toggle::new(Motor::new(peripherals.port_5, Gearset::Green, Direction::Forward), OpticalSensor::new(peripherals.port_6), "Green");
 
-    let mut robot = Robot::new(chassis, controller, lift, dsrs, auto_selector);
+    let mut auto_selector = AutoSelector::new(AUTOS);
+    auto_selector.select("Test");
+
+    let mut robot = Robot::new(chassis, controller, lift, dsrs, auto_selector, toggle);
     
     /* Task Spawning */
 

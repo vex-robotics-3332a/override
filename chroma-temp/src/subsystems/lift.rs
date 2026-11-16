@@ -129,6 +129,7 @@ impl Lift {
 
 pub struct Cascade {
     pub motors: Vec<Motor>,
+    pub encoder: RotationSensor,
     pub pid: PIDController,
     pub stopping_mode: BrakeMode,
     pub exit_range: f64,
@@ -136,8 +137,8 @@ pub struct Cascade {
 }
 
 impl Cascade {
-    pub fn new(motors: Vec<Motor>, pid: PIDController, stopping_mode: BrakeMode) -> Self {
-        Self { motors, pid, stopping_mode, exit_range: 2.0, max_lower: 8.0 }
+    pub fn new(motors: Vec<Motor>, pid: PIDController, encoder: RotationSensor, stopping_mode: BrakeMode) -> Self {
+        Self { motors, encoder, pid, stopping_mode, exit_range: 2.0, max_lower: 8.0 }
     }
 
     pub fn extend(&mut self) {
@@ -145,7 +146,7 @@ impl Cascade {
     }
 
     pub fn retract(&mut self) {
-        self.motors.iter_mut().for_each(|motor| motor.set_voltage(-5.0).unwrap_or_default());
+        self.motors.iter_mut().for_each(|motor| motor.set_voltage(-motor.max_voltage()/1.5).unwrap_or_default());
     }
 
     pub fn stop(&mut self) {
@@ -153,8 +154,11 @@ impl Cascade {
     }
 
     pub fn get_height(&self) -> Angle {
-        let total_angle: Angle = self.motors.iter().fold(Angle::ZERO, |acc, motor| acc + motor.position().unwrap_or_default());
-        Angle::from_degrees(total_angle.as_degrees() / 2.0)
+        self.encoder.position().unwrap_or_default()
+    }
+
+    pub fn reset_encoder(&mut self) {
+        self.encoder.set_position(Angle::ZERO).ok();
     }
 
     /// Returns `true` while still moving; stops the motors and returns `false` once within `exit_range`.

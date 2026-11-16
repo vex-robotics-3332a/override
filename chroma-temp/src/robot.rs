@@ -4,6 +4,7 @@ use crate::SLEEP_INTERVAL;
 use vexide::prelude::*;
 use crate::chassis::Chassis;
 use crate::subsystems::lift::Lift;
+use crate::subsystems::toggles::Toggle;
 use crate::localization::dsr::Dsrs;
 use crate::auto_selector::AutoSelector;
 use vexide::controller::ControllerState;
@@ -13,11 +14,12 @@ pub struct Robot {
     pub lift: Lift,
     pub dsrs: Dsrs,
     pub auto_selector: AutoSelector,
+    pub toggle: Toggle,
 }
 
 impl Robot {
-    pub fn new(chassis: Chassis, controller: Controller, lift: Lift, dsrs: Dsrs, auto_selector: AutoSelector) -> Self {
-        Self { chassis, controller, lift, dsrs, auto_selector }
+    pub fn new(chassis: Chassis, controller: Controller, lift: Lift, dsrs: Dsrs, auto_selector: AutoSelector, toggle: Toggle) -> Self {
+        Self { chassis, controller, lift, dsrs, auto_selector, toggle }
     }
 
     pub async fn op_control(&mut self) {
@@ -26,6 +28,7 @@ impl Robot {
             self.chassis.op_control_tick(&controller_state);
             self.binding(&controller_state);
             self.auto_selector.tick(&mut self.controller, &controller_state).await;
+            self.toggle.alliance = self.auto_selector.alliance();
             sleep(SLEEP_INTERVAL).await;
         }
     }
@@ -34,6 +37,7 @@ impl Robot {
         loop {
             let controller_state = self.controller.state().unwrap_or_default();
             self.auto_selector.tick(&mut self.controller, &controller_state).await;
+            self.toggle.alliance = self.auto_selector.alliance();
             sleep(SLEEP_INTERVAL).await;
         }
     }
@@ -54,6 +58,10 @@ impl Robot {
 
             if !controller_state.button_l1.is_pressed() && !controller_state.button_l2.is_pressed() {
                 self.lift.cascade_stop();
+            }
+
+            if controller_state.button_r2.is_now_pressed() {
+                self.lift.claw_toggle();
             }
 
         //     //wrist
@@ -87,6 +95,13 @@ impl Robot {
 
         // if controller_state.button_a.is_now_pressed() {
         //     self.lift.drop_stack();
+        }
+
+        if controller_state.button_r1.is_pressed() {
+            self.toggle.auto_toggle();
+        }
+        else {
+            self.toggle.off();
         }
     }
 }

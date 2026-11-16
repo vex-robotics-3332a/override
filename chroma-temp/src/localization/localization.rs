@@ -29,7 +29,7 @@ impl Localization {
             let mut pose = self.pose.try_lock().expect("Pose locked while changing!");
             // imu is clockwise+ instead of counterclockwise+ so we need to invert it
             let current_heading = -self.imu.try_lock().expect("IMU locked while updating pose").heading().unwrap_or_default();
-            let odometry_update = self.odometry.update(current_heading, self.previous_heading);
+            let odometry_update = self.odometry.update(self.previous_heading, current_heading);
 
             *pose = *pose + Pose::new(odometry_update.x, odometry_update.y, Angle::ZERO);
             pose.heading = current_heading;

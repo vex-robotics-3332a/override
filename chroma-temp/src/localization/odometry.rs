@@ -12,6 +12,7 @@ pub trait Encoder {
 pub struct TrackingPod {
     pub rotation: RotationSensor,
     pub diameter: f64,
+    /// Linear pods: distance to the right of the tracking center. Horizontal pods: distance forward of it.
     pub offset: f64,
     pub reversed: bool,
     // why would you use this???
@@ -42,7 +43,8 @@ impl TrackingPod {
 impl Encoder for TrackingPod {
     fn get_travel(&self) -> f64 {
         let position = self.rotation.position().unwrap_or_default().as_turns();
-        position * 2.0 * PI * self.diameter * 0.5 * self.ratio
+        let travel = position * 2.0 * PI * self.diameter * 0.5 * self.ratio;
+        if self.reversed { -travel } else { travel }
     }
 
     fn reset_travel(&mut self) {
