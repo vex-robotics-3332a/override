@@ -40,6 +40,7 @@ use crate::configs::*;
 
 const SLEEP_INTERVAL: Duration = Duration::new(0.0 as u64, 10000000);
 const test: Duration = Duration::from_millis(10);
+const MM_PER_INCH: f64 = 25.4;
 // Dear future self...
 // I'm sorry.
 
@@ -102,22 +103,22 @@ async fn main(peripherals: Peripherals) {
 
     let left_dsr = Dsr::new(
         DistanceSensor::new(peripherals.port_3),
-        Pose::new(-0.25, 8.618, Angle::from_degrees(90.0)),
+        Pose::new(-0.25, 5.567, Angle::from_degrees(90.0)),
         0.0
     );
     let front_dsr = Dsr::new(
         DistanceSensor::new(peripherals.port_4),
-        Pose::new(0.875, 4.0, Angle::from_degrees(0.0)),
+        Pose::new(4.5555, 1.630, Angle::from_degrees(0.0)),
         0.0
     );
     let right_dsr = Dsr::new(
         DistanceSensor::new(peripherals.port_7),
-        Pose::new(-0.25, -8.618, Angle::from_degrees(270.0)),
+        Pose::new(-0.25, -5.567, Angle::from_degrees(270.0)),
         0.0
     );
-    let back_dsr = Dsr::new(
+    let back_dsr = Dsr::new(    
         DistanceSensor::new(peripherals.port_8),
-        Pose::new(2.25, -6.4375, Angle::from_degrees(180.0)),
+        Pose::new(-3.436, -4.263, Angle::from_degrees(180.0)),
         0.0
     );
     
@@ -145,21 +146,22 @@ async fn main(peripherals: Peripherals) {
     let lift_motor_c = Motor::new(peripherals.port_9, Gearset::Green, Direction::Forward);
 
     /* lift */
-    let lift_encoder = RotationSensor::new(peripherals.port_2, Direction::Forward);
+    let lift_encoder = RotationSensor::new(peripherals.port_2, Direction::Reverse);
     let cascade = Cascade::new(
         vec![lift_motor_a, lift_motor_b, lift_motor_c], 
         PIDController::new(
-            0.6, 
+            0.08, 
             0.0, 
-            0.2, 
+            0.0, 
             f64::INFINITY, 
             12.0, 
-            3.0, 
+            1.0, 
             f64::INFINITY), 
         lift_encoder,
         BrakeMode::Hold);
     let claw = Claw::new(AdiDigitalOut::new(peripherals.adi_a));
-    let lift = Lift::new(cascade, claw);
+    let back_sensor = BackSensor::new(DistanceSensor::new(peripherals.port_17));
+    let lift = Lift::new(cascade, claw, back_sensor);
     let dsrs = Dsrs { left: left_dsr, front: front_dsr, right: right_dsr, back: back_dsr};
     let toggle = Toggle::new(Motor::new(peripherals.port_5, Gearset::Green, Direction::Forward), OpticalSensor::new(peripherals.port_6), "Green");
 
@@ -170,6 +172,7 @@ async fn main(peripherals: Peripherals) {
     
     /* Task Spawning */
 
+    robot.lift.reset_encoder();
     robot.chassis.init().await;
 
     robot.chassis.set_brake_mode(BrakeMode::Brake);

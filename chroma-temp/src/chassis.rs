@@ -1,7 +1,8 @@
 use vexide::{smart::motor::BrakeMode, sync::Mutex, controller::ControllerState};
 use alloc::rc::Rc;
+use core::cell::Cell;
 use vexide::prelude::*;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use crate::{SLEEP_INTERVAL, localization::localization::Localization, subsystems::drivetrain::Drivetrain, telemetry};
 use crate::localization::dsr::{Dsr, Wall};
 use crate::helpers::Pose;
@@ -14,6 +15,8 @@ pub struct Chassis {
     pub imu: Rc<Mutex<InertialSensor>>,
     pub pose: Rc<Mutex<Pose>>,
     pub config: ChassisConfig,
+    pub end_requested: Cell<bool>,
+    pub driving: Cell<bool>,
 }
 
 impl Chassis {
@@ -26,6 +29,35 @@ impl Chassis {
             imu,
             pose,
             config,
+            end_requested: Cell::new(false),
+            driving: Cell::new(false),
+        }
+    }
+
+    /// Ends the running `drive_along` on its next tick.
+    pub fn end_motion(&self) {
+        self.end_requested.set(true);
+    }
+
+    /// Polls `condition` every tick and ends the running `drive_along` once it returns `target`.
+    /// Gives up when the motion finishes on its own.
+    pub async fn end_motion_when(&self, condition: impl Fn() -> bool, target: bool) {
+        loop {
+            if condition() == target {
+                self.end_motion();
+                return;
+            }
+            sleep(SLEEP_INTERVAL).await;
+            if !self.driving.get() {
+                return;
+            }
+        }
+    }
+
+    /// Awaits `task` and ends the running `drive_along` if it returns `true`.
+    pub async fn end_motion_when_task(&self, task: impl Future<Output = bool>) {
+        if task.await {
+            self.end_motion();
         }
     }
 
@@ -54,6 +86,26 @@ impl Chassis {
         *self.pose.try_lock().expect("Pose unexpectedly locked while writing!") = new_pose;
         // pose uses CCW+, IMU heading() is CW+, and localization reads -imu.heading().
         self.imu.try_lock().expect("IMU locked while resetting heading").set_heading(-new_pose.heading).ok();
+    }
+
+    /// Drives each side at a fixed voltage for `time`, then stops. Can be ended early with `end_motion`.
+    pub async fn drive_raw_v(&self, left_v: f64, right_v: f64, time: Duration) {
+        let start = Instant::now();
+        self.end_requested.set(false);
+        self.driving.set(true);
+        
+        {
+            let mut dt = self.drivetrain.try_lock().expect("Dt locked while driving raw v!");
+            dt.left_side.spin_v(left_v);
+            dt.right_side.spin_v(right_v);
+        }
+
+        while start.elapsed() < time && !self.end_requested.get() {
+            sleep(SLEEP_INTERVAL).await;
+        }
+
+        self.driving.set(false);
+        self.drivetrain.try_lock().expect("Dt locked while stopping raw v!").stop();
     }
 
     /// Snaps the pose axis facing `wall` to `dsr`'s reading, retrying briefly on bad readings.

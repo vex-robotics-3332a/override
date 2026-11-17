@@ -4,6 +4,7 @@ from math import cos, radians, sin
 
 import flet as ft
 
+import keys
 from history import ActionHistory
 from motion import (
     FIELD_SIZE_IN,
@@ -14,9 +15,17 @@ from motion import (
     clamp_field_coord,
     clamp_field_point,
 )
-from playback import Timeline, build_routine_timeline
+from playback import Timeline, build_routine_timeline, curve_boundaries
 from profiling import profile_motion
-from serialize import actions_from_json, actions_to_json, timeout_from_json
+from serialize import (
+    action_items_from_json,
+    action_items_to_json,
+    actions_from_json,
+    actions_to_json,
+    curve_from_json,
+    curve_to_json,
+    timeout_from_json,
+)
 from theme import (
     ACCENT,
     ACCENT_BORDER,
@@ -341,6 +350,275 @@ def _title_with_divider(text: str, size: int) -> ft.Column:
     )
 
 
+_LIST_CARD_PADDING = ft.Padding.symmetric(horizontal=10, vertical=6)
+
+
+def _time_label(ms: float) -> ft.Text:
+    return ft.Text(f"{ms:.0f} ms", size=12, color=ft.Colors.ON_SURFACE_VARIANT)
+
+
+def _compact_icon_button(icon, *, color, tooltip: str, on_click, disabled: bool = False) -> ft.IconButton:
+    return ft.IconButton(
+        icon=icon,
+        icon_color=color,
+        icon_size=18,
+        padding=4,
+        visual_density=ft.VisualDensity.COMPACT,
+        tooltip=tooltip,
+        disabled=disabled,
+        on_click=on_click,
+    )
+
+
+def _list_row(action, card: ft.Control, *, reorderable: bool, delete_tooltip: str) -> ft.Row:
+    """Drag handle + card + delete button, laid out as one action-list entry."""
+    controls: list[ft.Control] = []
+    if reorderable:
+        controls.append(
+            ft.ReorderableDragHandle(
+                content=ft.Icon(ft.Icons.DRAG_HANDLE, size=20, color=ft.Colors.ON_SURFACE_VARIANT),
+            )
+        )
+    controls.append(card)
+    if action.deletable:
+        controls.append(
+            _compact_icon_button(
+                ft.Icons.DELETE_OUTLINE,
+                color=RED_LIGHT,
+                tooltip=delete_tooltip,
+                on_click=lambda e: action._handle_delete(e),
+            )
+        )
+    return ft.Row(
+        key=action.key,
+        spacing=4,
+        opacity=0.55 if action._dragging else 1.0,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        controls=controls,
+    )
+
+
+_GROUP_INDENT = ft.Margin.only(left=20)
+
+# Copied actions or curves, shared across routines: {"kind": "actions" | "curves", "items": [...]}.
+_clipboard: dict = {"data": None}
+
+
+class _TextFocus:
+    """The editor text field holding keyboard focus; list shortcuts yield to it."""
+
+    field: ft.TextField | None = None
+
+
+def _track_text_focus(control) -> None:
+    """Wrap on_focus / on_blur of every TextField under ``control`` (idempotent)."""
+    if isinstance(control, ft.TextField):
+        if getattr(control.on_focus, "_tracks_text_focus", False):
+            return
+        inner_focus, inner_blur = control.on_focus, control.on_blur
+
+        def on_focus(e, field=control):
+            _TextFocus.field = field
+            if inner_focus is not None:
+                inner_focus(e)
+
+        def on_blur(e, field=control):
+            if _TextFocus.field is field:
+                _TextFocus.field = None
+            if inner_blur is not None:
+                inner_blur(e)
+
+        on_focus._tracks_text_focus = True
+        control.on_focus, control.on_blur = on_focus, on_blur
+        return
+    for attr in ("content", "controls"):
+        child = getattr(control, attr, None)
+        for c in child if isinstance(child, list) else [child]:
+            if isinstance(c, ft.Control):
+                _track_text_focus(c)
+
+
+def _menu_item(
+    label: str, icon, data, shortcut: str | None, disabled: bool, danger: bool = False
+) -> ft.PopupMenuItem:
+    color = ft.Colors.RED_400 if danger and not disabled else None
+    text = ft.Text(label, size=13, color=color)
+    if danger:
+        icon = ft.Icon(icon, color=color)
+    if shortcut:
+        content = ft.Row(
+            width=190,
+            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+            controls=[text, ft.Text(shortcut, size=12, color=ft.Colors.ON_SURFACE_VARIANT)],
+        )
+    else:
+        content = text
+    return ft.PopupMenuItem(content=content, icon=icon, height=36, disabled=disabled, data=data)
+
+
+# Caret between two characters so both Backspace and forward Delete have
+# something to remove (and so count as handled).
+_KEY_SINK_TEXT = "\u200b\u200b"
+_KEY_SINK_SELECTION = ft.TextSelection(base_offset=1, extent_offset=1)
+
+
+def _delete_entry(count: int, disabled: bool) -> tuple:
+    label = f"Delete {count} items" if count > 1 else "Delete"
+    return (label, ft.Icons.DELETE_OUTLINE, ("delete",), None, disabled, True)
+
+
+class _ListMenu:
+    """Right-click menu around a list card.
+
+    ``sync`` takes ``(label, icon, data, shortcut, disabled[, danger])`` tuples
+    (None for a divider) and only replaces the items when they change, so a rebuild while
+    the menu is open keeps the item ids the open menu reports.
+    """
+
+    def __init__(self, content: ft.Control, *, expand: bool, on_choose):
+        self._spec: tuple | None = None
+        self._on_choose = on_choose
+        self.control = ft.ContextMenu(expand=expand, content=content, on_select=self._select)
+
+    def sync(self, spec: list) -> None:
+        spec = tuple(spec)
+        if spec == self._spec:
+            return
+        self._spec = spec
+        self.control.secondary_items = [
+            _menu_item(*entry) if entry is not None else ft.PopupMenuItem() for entry in spec
+        ]
+        if _is_mounted(self.control):
+            self.control.update()
+
+    def _select(self, e: ft.ContextMenuSelectEvent):
+        items = self.control.secondary_items
+        chosen = next(
+            (it for it in items if e.item_id is not None and getattr(it, "_i", None) == e.item_id),
+            None,
+        )
+        if chosen is None and e.item_index is not None and 0 <= e.item_index < len(items):
+            chosen = items[e.item_index]
+        if chosen is not None and chosen.data is not None:
+            self._on_choose(chosen.data)
+
+
+class ActionGroup:
+    """A named, collapsible run of consecutive actions.
+
+    Membership lives on each action (``action.group``); the list stays flat so
+    playback, export and parsing ignore groups entirely.
+    """
+
+    deletable = True
+
+    def __init__(self, name: str = "Group", collapsed: bool = False):
+        self.name = name
+        self.collapsed = collapsed
+        self.key = f"group-{id(self)}"
+        self.on_click = None
+        self.on_toggle = None
+        self.on_menu = None
+        self.on_delete = None
+        self.on_hover_change = None
+        self.menu: _ListMenu | None = None
+        self._hovering = False
+        self._dragging = False
+        self._card: ft.Container | None = None
+        self._row: ft.Row | None = None
+
+    def _handle_delete(self, e):
+        if self.on_delete is not None:
+            self.on_delete(self)
+
+    def _handle_hover(self, e):
+        if self.on_hover_change is not None:
+            self.on_hover_change(self, str(e.data).lower() == "true")
+
+    def build_header(self, *, selected: bool, count: int, time_ms: float) -> ft.Control:
+        if self._card is None:
+            self._card = ft.Container(
+                expand=True,
+                padding=_LIST_CARD_PADDING,
+                border_radius=8,
+                on_click=lambda e: self.on_click and self.on_click(self),
+                on_hover=self._handle_hover,
+            )
+            self.menu = _ListMenu(
+                self._card,
+                expand=True,
+                on_choose=lambda data: self.on_menu and self.on_menu(self, data),
+            )
+            self._row = _list_row(self, self.menu.control, reorderable=True, delete_tooltip="Delete group")
+        if selected:
+            self._card.bgcolor, self._card.border = ACCENT_CONTAINER, ft.Border.all(2, ACCENT_BORDER)
+        elif self._hovering:
+            self._card.bgcolor, self._card.border = ft.Colors.SURFACE_CONTAINER_HIGH, ft.Border.all(2, ft.Colors.OUTLINE)
+        else:
+            self._card.bgcolor = ft.Colors.SURFACE_CONTAINER_HIGHEST
+            self._card.border = ft.Border.all(1, ft.Colors.OUTLINE_VARIANT)
+        # Separate tap target so collapsing doesn't also select the group.
+        chevron = ft.Container(
+            width=22,
+            height=22,
+            border_radius=11,
+            alignment=ft.Alignment(0, 0),
+            tooltip="Expand" if self.collapsed else "Collapse",
+            on_click=lambda e: self.on_toggle and self.on_toggle(self),
+            content=ft.Icon(
+                ft.Icons.CHEVRON_RIGHT if self.collapsed else ft.Icons.EXPAND_MORE,
+                size=18,
+                color=ft.Colors.ON_SURFACE_VARIANT,
+            ),
+        )
+        self._card.content = ft.Row(
+            spacing=8,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            controls=[
+                chevron,
+                ft.Icon(
+                    ft.Icons.FOLDER if self.collapsed else ft.Icons.FOLDER_OPEN,
+                    size=18,
+                    color=ft.Colors.ON_SURFACE_VARIANT,
+                ),
+                ft.Container(expand=True, content=title_text(self.name, size=TITLE_SIZE_LIST)),
+                ft.Text(
+                    f"{count} item{'s' if count != 1 else ''}",
+                    size=12,
+                    color=ft.Colors.ON_SURFACE_VARIANT,
+                ),
+                _time_label(time_ms),
+            ],
+        )
+        self._row.opacity = 0.55 if self._dragging else 1.0
+        if _is_mounted(self._card):
+            self._card.update()
+        return self._row
+
+
+def normalize_groups(actions: list) -> None:
+    """Keep every group one consecutive run (Start is never grouped).
+
+    A run separated from the rest of its group gets its own copy of the group.
+    """
+    seen: set[int] = set()
+    run_src = run_dst = None
+    for action in actions:
+        group = None if isinstance(action, StartAction) else getattr(action, "group", None)
+        if group is None:
+            action.group = None
+            run_src = run_dst = None
+            continue
+        if group is run_src:
+            action.group = run_dst
+            continue
+        run_src = group
+        run_dst = group if id(group) not in seen else ActionGroup(group.name, group.collapsed)
+        seen.add(id(group))
+        seen.add(id(run_dst))
+        action.group = run_dst
+
+
 def default_curve_points(previous_pose: tuple[float, float, float] | None) -> list[tuple[float, float]]:
     """Default cubic bezier with control points every 6\" along the previous heading."""
     step = 6.0
@@ -365,6 +643,8 @@ class CanvasCurve:
     def __init__(self, motion_action: "MotionAction", curve_index: int):
         self.motion_action = motion_action
         self.curve_index = curve_index
+        # Drawn faded when another motion holds the selection.
+        self.dimmed = False
 
     @property
     def curve(self) -> Curve:
@@ -392,10 +672,14 @@ class RobotAction:
         self.on_delete = None
         self.on_change = None
         self.on_hover_change = None
+        self.on_menu = None
+        self.menu: _ListMenu | None = None
+        self.group: ActionGroup | None = None
         self._hovering = False
         self._dragging = False
         self._list_index = 0
         self._item = None
+        self._row = None
 
     def summary_controls(self) -> list:
         return []
@@ -423,84 +707,55 @@ class RobotAction:
             return ft.Border.all(2, ft.Colors.OUTLINE)
         return ft.Border.all(1, ft.Colors.OUTLINE_VARIANT)
 
-    def _index_badge(self) -> ft.Control:
-        return ft.Container(
-            padding=ft.Padding.symmetric(horizontal=7, vertical=3),
-            border_radius=8,
-            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGH,
-            content=ft.Text(str(self._list_index), size=12, weight=ft.FontWeight.BOLD),
-        )
+    def _list_trailing(self) -> ft.Control | None:
+        """Right-aligned value next to the title in list cards."""
+        return None
 
-    def _list_header_row(self) -> ft.Row:
+    def _list_header_row(self, leading: ft.Control | None = None) -> ft.Row:
+        trailing = self._list_trailing()
         return ft.Row(
-            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+            spacing=8,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
             controls=[
-                ft.Row(
-                    spacing=8,
-                    controls=[
-                        ft.Icon(self.icon, size=22, color=ft.Colors.ON_SURFACE_VARIANT),
-                        title_text(self.name, size=TITLE_SIZE_LIST),
-                    ],
-                ),
-                self._index_badge(),
+                leading or ft.Icon(self.icon, size=18, color=ft.Colors.ON_SURFACE_VARIANT),
+                ft.Container(expand=True, content=title_text(self.name, size=TITLE_SIZE_LIST)),
+                *([trailing] if trailing is not None else []),
             ],
         )
 
-    def _item_body(self) -> ft.Control | None:
-        """Content shown below the title row in list cards."""
-        return None
+    def _with_context_menu(self, content: ft.Control, *, expand: bool = True) -> ft.Control:
+        """Right-click menu; ActionList fills in the items (see ``_menu_spec``)."""
+        self.menu = _ListMenu(
+            content,
+            expand=expand,
+            on_choose=lambda data: self.on_menu and self.on_menu(self, data),
+        )
+        return self.menu.control
 
     def build_list_item(self, reorderable: bool = False) -> ft.Control:
-        delete_btn = None
-        if self.deletable:
-            delete_btn = ft.IconButton(
-                icon=ft.Icons.DELETE_OUTLINE,
-                icon_color=RED_LIGHT,
-                icon_size=20,
-                tooltip="Delete",
-                on_click=lambda e, action=self: action._handle_delete(e),
+        # Reuse the same controls across rebuilds: replacing the card while
+        # the pointer is over it (hover triggers a rebuild) swallows clicks.
+        if self._item is None:
+            self._item = ft.Container(
+                expand=True,
+                padding=_LIST_CARD_PADDING,
+                border_radius=8,
+                on_click=self._handle_click,
+                on_hover=self._handle_hover,
             )
-
-        body_parts = [self._list_header_row()]
-        item_body = self._item_body()
-        if item_body is not None:
-            body_parts.append(item_body)
-
-        card_body = ft.Column(spacing=8, tight=True, controls=body_parts)
-
-        card = ft.Container(
-            expand=True,
-            padding=12,
-            border_radius=10,
-            bgcolor=self._bgcolor(),
-            border=self._border(),
-            on_click=self._handle_click,
-            on_hover=self._handle_hover,
-            content=card_body,
-        )
-        self._item = card
-
-        if not reorderable:
-            row_controls = [card]
-        else:
-            row_controls = [
-                ft.ReorderableDragHandle(
-                    content=ft.Icon(ft.Icons.DRAG_HANDLE, color=ft.Colors.ON_SURFACE_VARIANT),
-                ),
-                card,
-            ]
-
-        if delete_btn is not None:
-            row_controls.append(ft.Container(padding=ft.Padding.only(top=4), content=delete_btn))
-
-        return ft.Row(
-            key=self.key,
-            spacing=4,
-            opacity=0.55 if self._dragging else 1.0,
-            vertical_alignment=ft.CrossAxisAlignment.START,
-            controls=row_controls,
-        )
+            self._row = _list_row(
+                self,
+                self._with_context_menu(self._item),
+                reorderable=reorderable,
+                delete_tooltip="Delete",
+            )
+        self._item.bgcolor = self._bgcolor()
+        self._item.border = self._border()
+        self._item.content = self._list_header_row()
+        self._row.opacity = 0.55 if self._dragging else 1.0
+        if _is_mounted(self._item):
+            self._item.update()
+        return self._row
 
     def _notify_change(self, *, commit: bool = False):
         if self.on_change is not None:
@@ -534,15 +789,8 @@ class StartAction(RobotAction):
     def end_pose(self):
         return (self.x, self.y, self.heading)
 
-    def _item_body(self) -> ft.Control:
-        return ft.Column(
-            spacing=4,
-            controls=[
-                ft.Text(self.type_name, size=12, color=ft.Colors.ON_SURFACE_VARIANT),
-                _tag_line("Pose", f"({self.x:.1f}, {self.y:.1f})  {self.heading:.0f}°"),
-                _tag_line("Time", f"{self.time:.0f} ms", muted=True),
-            ],
-        )
+    def _list_trailing(self) -> ft.Control:
+        return _time_label(self.time)
 
     def build_editor(self, previous_action) -> ft.Control:
         def apply(attr, clamp=False):
@@ -620,6 +868,9 @@ class MotionAction(RobotAction):
         self.on_reorder_curves = None
         self.on_reorder_curves_start = None
         self.on_reorder_curves_end = None
+        # (motion, curve_index) -> menu spec, and (motion, curve_index, data) on choose.
+        self.curve_menu_spec = None
+        self.on_curve_menu = None
         self._motion_card: ft.Container | None = None
         self._curves_panel: ft.Container | None = None
         self._curves_reorder_list: ft.ReorderableListView | None = None
@@ -642,16 +893,12 @@ class MotionAction(RobotAction):
     def recompute_profile(self) -> None:
         self.time = profile_motion(self.motion, f"motion_{self.motion_id}")
 
+    def _list_trailing(self) -> ft.Control:
+        return _time_label(self.time)
+
     @property
     def effective_timeout(self) -> float:
         return self.time if self.timeout is None else self.timeout
-
-    def _timeout_label(self) -> str:
-        if self.timeout is None:
-            return "Profile time"
-        if math.isinf(self.timeout):
-            return "inf"
-        return f"{self.timeout:.0f} ms"
 
     def canvas_color(self) -> str:
         return ACCENT_LIGHT
@@ -670,73 +917,24 @@ class MotionAction(RobotAction):
             return previous_action.end_pose()
         return None
 
-    def is_curve_selected(self, curve_index: int, selected_curve: tuple["MotionAction", int] | None) -> bool:
-        return selected_curve == (self, curve_index)
-
-    def _curve_bgcolor(self, curve_index: int, selected_curve: tuple["MotionAction", int] | None) -> str:
-        if self.is_curve_selected(curve_index, selected_curve):
+    def _curve_bgcolor(self, curve_index: int, selected_curves: set[int]) -> str:
+        if curve_index in selected_curves:
             return ACCENT_CONTAINER
         return ft.Colors.SURFACE_CONTAINER_HIGH
 
-    def _curve_border(self, curve_index: int, selected_curve: tuple["MotionAction", int] | None):
-        if self.is_curve_selected(curve_index, selected_curve):
+    def _curve_border(self, curve_index: int, selected_curves: set[int]):
+        if curve_index in selected_curves:
             return ft.Border.all(2, ACCENT_BORDER)
         return ft.Border.all(1, ft.Colors.OUTLINE_VARIANT)
 
-    def _curve_summary(self, curve: Curve, curve_index: int) -> ft.Control:
-        return ft.Column(
-            spacing=2,
-            controls=[
-                ft.Text(f"Curve {curve_index + 1}", size=13, weight=ft.FontWeight.BOLD),
-                _tag_line("Speed", f"{curve.max_speed:.0f}%", size=11),
-            ],
-        )
-
-    def _motion_summary(self, on_add_curve, on_motion_click) -> ft.Control:
-        count = len(self.motion.curves)
-        curve_label = "curve" if count == 1 else "curves"
+    def _curve_summary(self, curve: Curve, curve_index: int, duration_ms: float) -> ft.Control:
         return ft.Row(
-            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+            spacing=10,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
             controls=[
-                ft.Container(
-                    expand=True,
-                    on_click=on_motion_click,
-                    content=ft.Column(
-                        spacing=4,
-                        tight=True,
-                        controls=[
-                            _tag_line("Total time", f"{self.time:.0f} ms", muted=True),
-                            *(
-                                [_tag_line("Timeout", self._timeout_label(), muted=True)]
-                                if self.timeout is not None
-                                else []
-                            ),
-                            _tag_line("Curves", f"{count} {curve_label}", muted=True),
-                            *(
-                                [_tag_line("Start speed", f"{self.motion.start_speed:.0f}%", muted=True)]
-                                if self.motion.start_speed > 0
-                                else []
-                            ),
-                            *(
-                                [_tag_line("End speed", f"{self.motion.end_speed:.0f}%", muted=True)]
-                                if self.motion.end_speed > 0
-                                else []
-                            ),
-                            *(
-                                [_tag_line("During", _code_preview(self.code, 30), muted=True)]
-                                if self.code.strip()
-                                else []
-                            ),
-                        ],
-                    ),
-                ),
-                ft.IconButton(
-                    icon=ft.Icons.ADD,
-                    icon_color=ft.Colors.GREEN_ACCENT_400,
-                    tooltip="Add curve",
-                    on_click=on_add_curve,
-                ),
+                ft.Text(f"Curve {curve_index + 1}", size=13, weight=ft.FontWeight.BOLD, expand=True),
+                ft.Text(f"{curve.max_speed:.0f}%", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
+                _time_label(duration_ms),
             ],
         )
 
@@ -744,26 +942,33 @@ class MotionAction(RobotAction):
         self,
         curve: Curve,
         curve_index: int,
-        selected_curve: tuple["MotionAction", int] | None,
+        selected_curves: set[int],
         on_curve_click,
         on_delete_curve,
+        duration_ms: float,
     ) -> ft.Control:
         def handle_click(e, index=curve_index):
             on_curve_click(index)
 
+        def handle_menu(data, index=curve_index):
+            if self.on_curve_menu is not None:
+                self.on_curve_menu(self, index, data)
+
         card = ft.Container(
             expand=True,
-            padding=10,
+            padding=_LIST_CARD_PADDING,
             border_radius=8,
-            bgcolor=self._curve_bgcolor(curve_index, selected_curve),
-            border=self._curve_border(curve_index, selected_curve),
+            bgcolor=self._curve_bgcolor(curve_index, selected_curves),
+            border=self._curve_border(curve_index, selected_curves),
             on_click=handle_click,
-            content=self._curve_summary(curve, curve_index),
+            content=self._curve_summary(curve, curve_index, duration_ms),
         )
-        delete_btn = ft.IconButton(
-            icon=ft.Icons.DELETE_OUTLINE,
-            icon_color=RED_LIGHT,
-            icon_size=18,
+        menu = _ListMenu(card, expand=True, on_choose=handle_menu)
+        if self.curve_menu_spec is not None:
+            menu.sync(self.curve_menu_spec(self, curve_index))
+        delete_btn = _compact_icon_button(
+            ft.Icons.DELETE_OUTLINE,
+            color=RED_LIGHT,
             tooltip="Delete curve",
             disabled=len(self.motion.curves) <= 1,
             on_click=lambda e, index=curve_index: on_delete_curve(index),
@@ -771,7 +976,7 @@ class MotionAction(RobotAction):
         return ft.Row(
             key=curve.key,
             spacing=4,
-            vertical_alignment=ft.CrossAxisAlignment.START,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
             opacity=0.55 if self._dragging_curve_index == curve_index else 1.0,
             controls=[
                 ft.ReorderableDragHandle(
@@ -781,8 +986,8 @@ class MotionAction(RobotAction):
                         color=ft.Colors.ON_SURFACE_VARIANT,
                     ),
                 ),
-                card,
-                ft.Container(padding=ft.Padding.only(top=2), content=delete_btn),
+                menu.control,
+                delete_btn,
             ],
         )
 
@@ -800,7 +1005,7 @@ class MotionAction(RobotAction):
 
     def _sync_curves_panel(
         self,
-        selected_curve: tuple["MotionAction", int] | None,
+        selected_curves: set[int],
         on_curve_click,
         on_delete_curve,
     ):
@@ -816,8 +1021,17 @@ class MotionAction(RobotAction):
 
         if self.expanded:
             self._curves_panel.padding = ft.Padding.only(bottom=8)
+            bounds = curve_boundaries(self.motion)
+            durations = [b - a for a, b in zip(bounds, bounds[1:])]
             self._curves_reorder_list.controls = [
-                self._make_curve_row(curve, i, selected_curve, on_curve_click, on_delete_curve)
+                self._make_curve_row(
+                    curve,
+                    i,
+                    selected_curves,
+                    on_curve_click,
+                    on_delete_curve,
+                    durations[i] if i < len(durations) else 0.0,
+                )
                 for i, curve in enumerate(self.motion.curves)
             ]
             self._curves_panel.content = self._curves_reorder_list
@@ -830,7 +1044,7 @@ class MotionAction(RobotAction):
 
     def _sync_motion_card(
         self,
-        selected_curve: tuple["MotionAction", int] | None,
+        selected_curves: set[int],
         on_motion_click,
         on_add_curve,
         on_curve_click,
@@ -838,35 +1052,33 @@ class MotionAction(RobotAction):
     ):
         self._motion_card.bgcolor = self._bgcolor()
         self._motion_card.border = self._border()
-        self._motion_card.content = ft.Column(
-            spacing=8,
-            tight=True,
-            controls=[
-                ft.Container(
-                    on_click=on_motion_click,
-                    content=ft.Row(
-                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                        controls=[
-                            ft.Row(
-                                spacing=8,
-                                controls=[
-                                    ft.Icon(self.icon, size=22, color=ft.Colors.ON_SURFACE_VARIANT),
-                                    title_text(self.name, size=TITLE_SIZE_LIST),
-                                ],
-                            ),
-                            self._index_badge(),
-                        ],
-                    ),
-                ),
-                self._motion_summary(on_add_curve, on_motion_click),
-            ],
+        self._motion_card.on_click = on_motion_click
+        chevron = ft.Icon(
+            ft.Icons.EXPAND_MORE if self.expanded else ft.Icons.CHEVRON_RIGHT,
+            size=18,
+            color=ft.Colors.ON_SURFACE_VARIANT,
         )
-        self._sync_curves_panel(selected_curve, on_curve_click, on_delete_curve)
+        header = self._list_header_row(leading=chevron)
+        if self.expanded:
+            # Fixed-size box so the button doesn't make the row taller.
+            header.controls.append(
+                ft.Container(
+                    width=22,
+                    height=22,
+                    border_radius=11,
+                    alignment=ft.Alignment(0, 0),
+                    tooltip="Add curve",
+                    on_click=on_add_curve,
+                    content=ft.Icon(ft.Icons.ADD, size=18, color=ft.Colors.GREEN_ACCENT_400),
+                )
+            )
+        self._motion_card.content = header
+        self._sync_curves_panel(selected_curves, on_curve_click, on_delete_curve)
 
     def _ensure_list_row(
         self,
         reorderable: bool,
-        selected_curve: tuple["MotionAction", int] | None,
+        selected_curves: set[int],
     ) -> ft.Control:
         def on_motion_click(e):
             if self.on_select_motion is not None:
@@ -895,46 +1107,36 @@ class MotionAction(RobotAction):
 
         if self._motion_card is None:
             self._motion_card = ft.Container(
-                padding=12,
-                border_radius=10,
+                padding=_LIST_CARD_PADDING,
+                border_radius=8,
                 on_hover=self._handle_hover,
             )
 
         self._sync_motion_card(
-            selected_curve, on_motion_click, on_add_curve, on_curve_click, on_delete_curve
+            selected_curves, on_motion_click, on_add_curve, on_curve_click, on_delete_curve
         )
 
         if self._list_row is None:
-            delete_btn = ft.IconButton(
-                icon=ft.Icons.DELETE_OUTLINE,
-                icon_color=RED_LIGHT,
-                icon_size=20,
-                tooltip="Delete motion",
-                on_click=lambda e, action=self: action._handle_delete(e),
-            )
             card_body = ft.Column(
                 spacing=6,
                 tight=True,
-                controls=[self._motion_card, self._curves_panel],
+                horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
+                controls=[
+                    self._with_context_menu(self._motion_card, expand=False),
+                    self._curves_panel,
+                ],
             )
             card = ft.Container(expand=True, content=card_body)
             self._item = card
-
-            row_controls = [card] if not reorderable else [
-                ft.ReorderableDragHandle(
-                    content=ft.Icon(ft.Icons.DRAG_HANDLE, color=ft.Colors.ON_SURFACE_VARIANT),
-                ),
-                card,
-            ]
-            row_controls.append(ft.Container(padding=ft.Padding.only(top=4), content=delete_btn))
-            self._list_row = ft.Row(
-                key=self.key,
-                spacing=4,
-                vertical_alignment=ft.CrossAxisAlignment.START,
-                controls=row_controls,
+            self._list_row = _list_row(
+                self, card, reorderable=reorderable, delete_tooltip="Delete motion"
             )
         else:
             self._list_row.opacity = 0.55 if self._dragging else 1.0
+        # Keep the handle and delete button beside the header once curves show.
+        self._list_row.vertical_alignment = (
+            ft.CrossAxisAlignment.START if self.expanded else ft.CrossAxisAlignment.CENTER
+        )
 
         if _is_mounted(self._curves_panel):
             self._curves_panel.update()
@@ -948,9 +1150,9 @@ class MotionAction(RobotAction):
     def build_list_item(
         self,
         reorderable: bool = False,
-        selected_curve: tuple["MotionAction", int] | None = None,
+        selected_curves: set[int] | None = None,
     ) -> ft.Control:
-        return self._ensure_list_row(reorderable, selected_curve)
+        return self._ensure_list_row(reorderable, selected_curves or set())
 
     def build_motion_editor(self) -> ft.Control:
         def g1_change(e):
@@ -1585,14 +1787,6 @@ class CodeEditor:
         self._on_edit(True)
 
 
-def _code_preview(code: str, limit: int = 42) -> str:
-    for line in code.splitlines():
-        stripped = line.strip()
-        if stripped:
-            return stripped[:limit] + "…" if len(stripped) > limit else stripped
-    return "(empty)"
-
-
 class CodeAction(RobotAction):
     """Custom robot code plus a wait, run on its own between motions."""
 
@@ -1619,21 +1813,8 @@ class CodeAction(RobotAction):
         self.action_id = max(1, int(action_id))
         self.name = f"Action {self.action_id}"
 
-    def _item_body(self) -> ft.Control:
-        return ft.Column(
-            spacing=4,
-            controls=[
-                ft.Text(self.type_name, size=12, color=ft.Colors.ON_SURFACE_VARIANT),
-                ft.Text(
-                    _code_preview(self.code),
-                    size=12,
-                    font_family=MONO_FONT,
-                    max_lines=1,
-                    overflow=ft.TextOverflow.ELLIPSIS,
-                ),
-                _tag_line("Time", f"{self.time:.0f} ms", muted=True),
-            ],
-        )
+    def _list_trailing(self) -> ft.Control:
+        return _time_label(self.time)
 
     def build_editor(self, previous_action) -> ft.Control:
         def time_apply(v):
@@ -1687,8 +1868,15 @@ class ActionList:
         self._restoring = False
         self._dirty = False
         self.actions: list[RobotAction] = actions_from_json(self.history.current)
+        # ``selected`` / ``_selected_curve`` are the primary (editor) selection;
+        # ``_multi`` / ``_multi_curves`` hold everything shift-selected with it.
         self.selected: RobotAction | None = None
         self._selected_curve: tuple[MotionAction, int] | None = None
+        self._multi: list[RobotAction] = []
+        self._multi_curves: list[int] = []
+        self._selected_group: ActionGroup | None = None
+        # Display rows of the list, ("action", action) or ("group", group).
+        self._display: list[tuple[str, object]] = []
         self._code_focus: CodeEditor | None = None
         self._modal: ft.Container | None = None
         self._timeline = Timeline()
@@ -1778,9 +1966,18 @@ class ActionList:
         self._play_button = ft.IconButton(
             icon=ft.Icons.PLAY_ARROW,
             icon_color=ft.Colors.GREEN_ACCENT_400,
-            tooltip="Play",
+            tooltip="Play routine",
             on_click=self._toggle_playback,
         )
+        self._play_selection_button = ft.IconButton(
+            icon=ft.Icons.PLAY_ARROW,
+            icon_color=ACCENT_LIGHT,
+            tooltip="Play selected motion",
+            visible=False,
+            on_click=self._toggle_selection_playback,
+        )
+        # End of the window being played; None plays to the routine's end.
+        self._play_end_ms: float | None = None
         self._time_label = ft.Text("0.00 s", size=12, font_family=MONO_FONT, weight=ft.FontWeight.W_600)
         self._duration_label = ft.Text("/ 0.00 s", size=12, color=ft.Colors.ON_SURFACE_VARIANT)
         self._time_slider = ft.Slider(
@@ -1809,6 +2006,7 @@ class ActionList:
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                     controls=[
                             self._play_button,
+                            self._play_selection_button,
                             self._time_label,
                             self._duration_label,
                         ],
@@ -1854,6 +2052,36 @@ class ActionList:
                 ],
             ),
         )
+        # Only gets keys while focus is inside the list (sidebar fields don't
+        # reach it); entry clicks move focus here.
+        # Holds focus for the list. The listener above it still sees every key
+        # first, but a text field then claims edit keys (Delete, ⌘V, …) so macOS
+        # doesn't play its "unhandled key" beep. Edits to it are undone at once.
+        self._key_sink = ft.TextField(
+            value=_KEY_SINK_TEXT,
+            selection=_KEY_SINK_SELECTION,
+            on_change=self._reset_key_sink,
+            border=ft.InputBorder.NONE,
+            show_cursor=False,
+            enable_interactive_selection=False,
+            autocorrect=False,
+            enable_suggestions=False,
+            text_size=1,
+        )
+        self._keys = ft.KeyboardListener(
+            on_key_down=self._on_list_key_down,
+            content=ft.Stack(
+                expand=True,
+                controls=[
+                    ft.Container(
+                        left=0, top=0, width=1, height=1, opacity=0,
+                        clip_behavior=ft.ClipBehavior.HARD_EDGE,
+                        content=self._key_sink,
+                    ),
+                    ft.Container(left=0, top=0, right=0, bottom=0, content=self._reorder_list),
+                ],
+            ),
+        )
         self._actions_section = ft.Container(
             expand=True,
             padding=16,
@@ -1864,7 +2092,8 @@ class ActionList:
                 spacing=12,
                 expand=True,
                 controls=[
-                    ft.Container(expand=True, content=self._reorder_list),
+                    # KeyboardListener ignores `expand`.
+                    ft.Container(expand=True, content=self._keys),
                     self._simulate_bar,
                 ],
             ),
@@ -1981,10 +2210,54 @@ class ActionList:
     def stop_playback(self):
         self._playing = False
         self._playback_task = None
-        self._play_button.icon = ft.Icons.PLAY_ARROW
-        self._play_button.tooltip = "Play"
-        if _is_mounted(self._play_button):
-            self._play_button.update()
+        self._play_end_ms = None
+        self._sync_play_buttons()
+
+    def _selection_span(self) -> tuple[float, float] | None:
+        """Timeline window covering the selected curves, else the selected motions."""
+        if self._selected_curve is not None:
+            motion = self._selected_curve[0]
+            span = self._timeline.span_of(motion)
+            if span is None:
+                return None
+            bounds = curve_boundaries(motion.motion)
+            windows = [
+                (span[0] + bounds[i], min(span[1], span[0] + bounds[i + 1]))
+                for i in self._multi_curves
+                if i + 1 < len(bounds)
+            ]
+            if not windows:
+                return span
+            return (min(w[0] for w in windows), max(w[1] for w in windows))
+        spans = [
+            span
+            for a in self._multi
+            if isinstance(a, MotionAction) and (span := self._timeline.span_of(a)) is not None
+        ]
+        if not spans:
+            return None
+        return (min(s[0] for s in spans), max(s[1] for s in spans))
+
+    def _sync_play_buttons(self):
+        selection_window = self._playing and self._play_end_ms is not None
+        routine_playing = self._playing and not selection_window
+        self._play_button.icon = ft.Icons.PAUSE if routine_playing else ft.Icons.PLAY_ARROW
+        self._play_button.tooltip = "Pause" if routine_playing else "Play routine"
+        self._play_selection_button.icon = ft.Icons.PAUSE if selection_window else ft.Icons.PLAY_ARROW
+        if selection_window:
+            tooltip = "Pause"
+        elif self._selected_curve is not None:
+            tooltip = "Play selected curves" if len(self._multi_curves) > 1 else "Play selected curve"
+        elif len(self._multi) > 1:
+            tooltip = "Play selection"
+        else:
+            tooltip = "Play selected motion"
+        self._play_selection_button.tooltip = tooltip
+        self._play_selection_button.visible = any(isinstance(a, MotionAction) for a in self._multi)
+        self._play_selection_button.disabled = self._selection_span() is None
+        for button in (self._play_button, self._play_selection_button):
+            if _is_mounted(button):
+                button.update()
 
     def _format_time(self, ms: float) -> str:
         return f"{ms / 1000.0:.2f} s"
@@ -2010,8 +2283,7 @@ class ActionList:
             self._time_label.update()
         if _is_mounted(self._duration_label):
             self._duration_label.update()
-        if _is_mounted(self._play_button):
-            self._play_button.update()
+        self._sync_play_buttons()
 
         if emit_pose:
             self._emit_playback_pose()
@@ -2063,16 +2335,35 @@ class ActionList:
         if self._timeline.duration_ms <= 0:
             return
         if self._playing:
+            was_routine = self._play_end_ms is None
             self.stop_playback()
             self._sync_playback_chrome()
-            return
+            if was_routine:
+                return
         if self._play_time_ms >= self._timeline.duration_ms:
             self._seek(0.0, update_chrome=True)
+        self._start_playback(end_ms=None)
+
+    def _toggle_selection_playback(self, e):
+        span = self._selection_span()
+        if span is None:
+            return
+        if self._playing:
+            was_selection = self._play_end_ms is not None
+            self.stop_playback()
+            self._sync_playback_chrome()
+            if was_selection:
+                return
+        start, end = span
+        # Resume inside the motion; otherwise restart it from the beginning.
+        if not (start <= self._play_time_ms < end):
+            self._seek(start, update_chrome=True)
+        self._start_playback(end_ms=end)
+
+    def _start_playback(self, *, end_ms: float | None):
         self._playing = True
-        self._play_button.icon = ft.Icons.PAUSE
-        self._play_button.tooltip = "Pause"
-        if _is_mounted(self._play_button):
-            self._play_button.update()
+        self._play_end_ms = end_ms
+        self._sync_play_buttons()
         self._playback_task = self.page.run_task(self._playback_loop)
 
     async def _playback_loop(self):
@@ -2088,8 +2379,11 @@ class ActionList:
             dt_ms = (now - last) * 1000.0
             last = now
             nxt = self._play_time_ms + dt_ms
-            if nxt >= self._timeline.duration_ms:
-                self._seek(self._timeline.duration_ms, update_chrome=True)
+            end = self._timeline.duration_ms
+            if self._play_end_ms is not None:
+                end = min(end, self._play_end_ms)
+            if nxt >= end:
+                self._seek(end, update_chrome=True)
                 self.stop_playback()
                 break
             # Canvas every frame; slider/label ~12Hz to avoid Flet UI hitching.
@@ -2125,45 +2419,146 @@ class ActionList:
                     return motion_idx
         return 0
 
-    def _set_selection_state(self, action: RobotAction | None, curve: tuple[MotionAction, int] | None):
+    def _set_selection_state(
+        self,
+        action: RobotAction | None,
+        curve: tuple[MotionAction, int] | None,
+        *,
+        multi: list[RobotAction] | None = None,
+        curves: list[int] | None = None,
+        group: ActionGroup | None = None,
+    ):
+        """Set the primary selection plus any extra shift-selected actions or curves."""
         self.selected = action
         self._selected_curve = curve
+        self._selected_group = group
+        if curve is not None:
+            self._multi = [curve[0]]
+            picked = set(curves or ()) | {curve[1]}
+            self._multi_curves = sorted(i for i in picked if 0 <= i < len(curve[0].motion.curves))
+        else:
+            picked = list(multi or ()) + ([action] if action is not None else [])
+            self._multi = [a for a in self.actions if any(a is p for p in picked)]
+            self._multi_curves = []
+        single = len(self._multi) == 1
         for a in self.actions:
-            a.selected = a is action
+            a.selected = any(a is m for m in self._multi)
             if isinstance(a, MotionAction):
-                a.expanded = a is action
+                a.expanded = a is action and (curve is not None or single)
+
+    def _is_single(self, action: RobotAction) -> bool:
+        return (
+            self.selected is action
+            and self._selected_curve is None
+            and self._selected_group is None
+            and len(self._multi) == 1
+        )
+
+    def motion_dimmed(self, motion_action: MotionAction) -> bool:
+        """Whether the canvas fades this motion because others are selected."""
+        if self.selected is None:
+            return False
+        if self._selected_curve is not None:
+            return self._selected_curve[0] is not motion_action
+        if not any(isinstance(a, MotionAction) for a in self._multi) and self._selected_group is None:
+            return False
+        return not any(a is motion_action for a in self._multi)
+
+    def curve_selected(self, motion_action: MotionAction, curve_index: int) -> bool:
+        return (
+            self._selected_curve is not None
+            and self._selected_curve[0] is motion_action
+            and curve_index in self._multi_curves
+        )
 
     def _editor_content(self) -> ft.Control | None:
         if self.selected is None:
             return None
+        if self._selected_group is not None:
+            return self._build_group_editor(self._selected_group)
         if self._selected_curve is not None:
             motion_action, curve_index = self._selected_curve
+            if len(self._multi_curves) > 1:
+                return self._build_multi_editor()
             curve = motion_action.motion.curves[curve_index]
             return motion_action.build_curve_editor(
                 curve,
                 curve_index,
                 self.previous_action(motion_action),
             )
+        if len(self._multi) > 1:
+            return self._build_multi_editor()
         if isinstance(self.selected, MotionAction):
             return self.selected.build_motion_editor()
         return self.selected.build_editor(self.previous_action(self.selected))
 
     def _editor_title(self) -> str:
+        if self._selected_group is not None:
+            return "Group"
         if self._selected_curve is not None:
+            if len(self._multi_curves) > 1:
+                return f"{len(self._multi_curves)} curves selected"
             _, curve_index = self._selected_curve
             return f"Curve {curve_index + 1}"
+        if len(self._multi) > 1:
+            return f"{len(self._multi)} actions selected"
         if self.selected is not None:
             return self.selected.type_name
         return ""
 
+    def _build_multi_editor(self) -> ft.Control:
+        if self._selected_curve is not None:
+            motion = self._selected_curve[0]
+            names = ", ".join(f"Curve {i + 1}" for i in self._multi_curves)
+            summary = f"{names} of {motion.name}"
+        else:
+            summary = ", ".join(a.name for a in self._multi)
+        span = self._selection_span()
+        lines = [ft.Text(summary, size=13)]
+        if span is not None:
+            lines.append(_tag_line("Simulated", f"{span[1] - span[0]:.0f} ms", muted=True))
+        lines.append(
+            ft.Text(
+                "Shift-click to add or remove items. Right-click for cut, copy, paste"
+                + ("" if self._selected_curve is not None else " and grouping")
+                + ".",
+                size=12,
+                color=ft.Colors.ON_SURFACE_VARIANT,
+            )
+        )
+        return ft.Column(spacing=8, tight=True, controls=lines)
+
+    def _build_group_editor(self, group: ActionGroup) -> ft.Control:
+        members = self._group_members(group)
+
+        def rename(e):
+            group.name = (e.control.value or "").strip() or "Group"
+            self._rebuild_list()
+
+        def commit(e):
+            rename(e)
+            self.commit_history()
+
+        name_field = _text_field("Name", group.name, rename, width=LEFT_PANEL_WIDTH, on_blur=commit)
+        name_field.on_submit = commit
+        return ft.Column(
+            spacing=10,
+            tight=True,
+            controls=[
+                name_field,
+                ft.Text(", ".join(a.name for a in members), size=13),
+                _tag_line("Total", f"{sum(a.time for a in members):.0f} ms", muted=True),
+            ],
+        )
+
     def select_motion(self, action: MotionAction, notify: bool = True):
-        if self.selected is action and self._selected_curve is None:
+        if self._is_single(action):
             return
         self._set_selection_state(action, None)
         self._apply_selection(notify)
 
     def select_curve(self, motion_action: MotionAction, curve_index: int, notify: bool = True):
-        if self._selected_curve == (motion_action, curve_index):
+        if self._selected_curve == (motion_action, curve_index) and len(self._multi_curves) == 1:
             return
         self._set_selection_state(motion_action, (motion_action, curve_index))
         self._apply_selection(notify)
@@ -2179,7 +2574,83 @@ class ActionList:
         self._set_selection_state(action, None)
         self._apply_selection(notify)
 
+    def select_many(self, actions: list[RobotAction], *, group: ActionGroup | None = None, notify: bool = True):
+        actions = [a for a in self.actions if any(a is x for x in actions)]
+        if not actions:
+            self.select(None, notify=notify)
+            return
+        self._set_selection_state(actions[-1], None, multi=actions, group=group)
+        self._apply_selection(notify)
+
+    def focus_keys(self):
+        """Route keys to the list so its shortcuts work after a click."""
+        _TextFocus.field = None
+        if _is_mounted(self._key_sink):
+            self.page.run_task(self._key_sink.focus)
+
+    def _reset_key_sink(self, e=None):
+        self._key_sink.value = _KEY_SINK_TEXT
+        self._key_sink.selection = _KEY_SINK_SELECTION
+        if _is_mounted(self._key_sink):
+            self._key_sink.update()
+
+    def _click_action(self, action: RobotAction):
+        """List click: shift adds / removes it, otherwise select or deselect it."""
+        self.focus_keys()
+        if keys.shift_held() and self.selected is not None:
+            self._extend_selection([action])
+        elif self._is_single(action):
+            self.select(None)
+        else:
+            self.select(action)
+
+    def _click_group(self, group: ActionGroup):
+        self.focus_keys()
+        members = self._group_members(group)
+        if keys.shift_held() and self.selected is not None:
+            self._extend_selection(members)
+        elif self._selected_group is group:
+            self.select(None)
+        else:
+            self.select_many(members, group=group)
+
+    def _click_curve(self, motion_action: MotionAction, curve_index: int):
+        self.focus_keys()
+        same_motion = self._selected_curve is not None and self._selected_curve[0] is motion_action
+        if keys.shift_held() and same_motion:
+            picked = list(self._multi_curves)
+            if curve_index in picked:
+                picked.remove(curve_index)
+            else:
+                picked.append(curve_index)
+            if not picked:
+                self.select_motion(motion_action)
+                return
+            primary = curve_index if curve_index in picked else picked[-1]
+            self._set_selection_state(motion_action, (motion_action, primary), curves=picked)
+            self._apply_selection(True)
+        elif self._selected_curve == (motion_action, curve_index) and len(self._multi_curves) == 1:
+            self.select_motion(motion_action)
+        else:
+            self.select_curve(motion_action, curve_index)
+
+    def _extend_selection(self, items: list[RobotAction]):
+        """Toggle ``items`` in the action selection (all out if all were in)."""
+        base = list(self._multi)
+        if all(any(i is b for b in base) for i in items):
+            base = [b for b in base if not any(b is i for i in items)]
+        else:
+            base += [i for i in items if not any(i is b for b in base)]
+        if not base:
+            self.select(None)
+            return
+        primary = items[-1] if any(items[-1] is b for b in base) else base[-1]
+        self._set_selection_state(primary, None, multi=base)
+        self._apply_selection(True)
+
     def _apply_editor_content(self, title: str, editor: ft.Control | None):
+        if editor is not None:
+            _track_text_focus(editor)
         self._editor_title_text.value = title
         self._editor_body.content = (
             editor if editor is not None else ft.Text("No editor for this action.")
@@ -2202,10 +2673,12 @@ class ActionList:
             self._editor_body.content = ft.Container(height=0)
             self._editor_body.opacity = 1.0
         else:
+            # A shell that was hidden never fires the fade's animation-end event.
+            was_visible = self._editor_shell.visible
             self._editor_shell.visible = True
             title = self._editor_title()
             editor = self._editor_content()
-            if animate and self._editor_body.opacity == 1.0:
+            if animate and was_visible and self._editor_body.opacity == 1.0:
                 self._pending_editor_apply = (title, editor)
                 self._editor_body.opacity = 0.0
             else:
@@ -2219,6 +2692,7 @@ class ActionList:
     def _apply_selection(self, notify: bool, *, animate: bool = True):
         self._update_editor_panel(flush=False, animate=animate)
         self._rebuild_list(flush=False)
+        self._sync_play_buttons()
         if notify:
             self._notify_scene()
         if _is_mounted(self.page):
@@ -2282,30 +2756,40 @@ class ActionList:
         self.commit_history()
 
     def _wire_action(self, action: RobotAction):
-        action.on_select = self.select
+        action.on_select = self._click_action
         action.on_delete = self._confirm_delete
         action.on_change = self._handle_action_change
         action.on_hover_change = self._handle_hover_change
+        action.on_menu = self._handle_menu
         if isinstance(action, MotionAction):
-            action.on_select_motion = self.select_motion
-            action.on_select_curve = self.select_curve
+            action.on_select_motion = self._click_action
+            action.on_select_curve = self._click_curve
             action.on_add_curve = self._add_curve
             action.on_delete_curve = self._delete_curve
             action.on_reorder_curves = self._handle_curve_reorder
             action.on_reorder_curves_start = self._handle_curve_reorder_start
             action.on_reorder_curves_end = self._handle_curve_reorder_end
             action.on_timeout_change = self._handle_code_change
+            action.curve_menu_spec = lambda motion, i: self._menu_spec((motion, i))
+            action.on_curve_menu = lambda motion, i, data: self._handle_menu((motion, i), data)
         if isinstance(action, (MotionAction, CodeAction)):
             action.on_code_change = self._handle_code_change
             action.code_editor.on_focus = self._on_code_focus
 
-    def _handle_hover_change(self, action: RobotAction, hovering: bool):
+    def _wire_group(self, group: ActionGroup):
+        group.on_click = self._click_group
+        group.on_toggle = self._toggle_group_collapsed
+        group.on_menu = self._handle_menu
+        group.on_delete = self._confirm_delete_group
+        group.on_hover_change = self._handle_hover_change
+
+    def _handle_hover_change(self, target, hovering: bool):
         changed = False
-        for a in self.actions:
-            new_hover = a is action and hovering
-            if a._hovering != new_hover:
+        for item in [*self.actions, *self._groups()]:
+            new_hover = item is target and hovering
+            if item._hovering != new_hover:
                 changed = True
-            a._hovering = new_hover
+            item._hovering = new_hover
         if changed:
             self._rebuild_list()
 
@@ -2344,23 +2828,60 @@ class ActionList:
             self.commit_history()
             self._rebuild_list()
 
+    def _groups(self) -> list[ActionGroup]:
+        groups: list[ActionGroup] = []
+        for action in self.actions:
+            if action.group is not None and not any(action.group is g for g in groups):
+                groups.append(action.group)
+        return groups
+
+    def _group_members(self, group: ActionGroup) -> list[RobotAction]:
+        return [a for a in self.actions if a.group is group]
+
     def _rebuild_list(self, *, flush: bool = True):
+        normalize_groups(self.actions)
         self._renumber_motions()
         self._renumber_code_actions()
         items = []
+        display: list[tuple[str, object]] = []
+        current_group = None
         for action in self.actions:
             if not isinstance(action, (MotionAction, CodeAction)):
                 action._list_index = 0
             self._wire_action(action)
+            group = action.group
+            if group is not None and group is not current_group:
+                self._wire_group(group)
+                members = self._group_members(group)
+                header = group.build_header(
+                    selected=self._selected_group is group,
+                    count=len(members),
+                    time_ms=sum(m.time for m in members),
+                )
+                group.menu.sync(self._menu_spec(group))
+                header.margin = None
+                items.append(header)
+                display.append(("group", group))
+            current_group = group
+            if group is not None and group.collapsed:
+                continue
             if isinstance(action, MotionAction):
-                items.append(
-                    action._ensure_list_row(
-                        reorderable=True,
-                        selected_curve=self._selected_curve,
-                    )
+                row = action._ensure_list_row(
+                    reorderable=True,
+                    selected_curves=set(self._multi_curves) if self._selected_curve is not None
+                    and self._selected_curve[0] is action else set(),
                 )
             else:
-                items.append(action.build_list_item(reorderable=isinstance(action, CodeAction)))
+                row = action.build_list_item(reorderable=isinstance(action, CodeAction))
+            if action.menu is not None:
+                action.menu.sync(self._menu_spec(action))
+            if isinstance(action, StartAction):
+                row.margin = ft.Margin.only(bottom=6)
+            else:
+                row.margin = _GROUP_INDENT if group is not None else None
+            items.append(row)
+            display.append(("action", action))
+        self._display = display
         self._reorder_list.controls = items
         if flush and _is_mounted(self._reorder_list):
             self._reorder_list.update()
@@ -2418,28 +2939,50 @@ class ActionList:
     def _next_motion_id(self) -> int:
         return len(self.motion_actions()) + 1
 
-    def _latest_pose(self):
-        for action in reversed(self.actions):
+    def _latest_pose(self, before: int | None = None):
+        for action in reversed(self.actions[:before]):
             pose = action.end_pose()
             if pose is not None:
                 return pose
         return None
 
     def _add_motion(self):
-        prev_pose = self._latest_pose()
+        self._insert_motion(len(self.actions))
+
+    def _add_code_action(self):
+        self._insert_code_action(len(self.actions))
+
+    def _insert_motion(self, index: int, group: ActionGroup | None = None):
+        prev_pose = self._latest_pose(before=index)
         motion = Motion(curves=[Curve(points=default_curve_points(prev_pose))])
         if motion.g1_continuity:
             motion.enforce_g1(previous_pose=prev_pose)
         action = MotionAction(motion, self._next_motion_id())
-        self.actions.append(action)
+        action.group = group
+        self.actions.insert(index, action)
+        # The next motion now starts from this one's end.
+        self._propagate_g1_from_action(action)
         self.select_curve(action, 0)
         self.commit_history()
 
-    def _add_code_action(self):
+    def _insert_code_action(self, index: int, group: ActionGroup | None = None):
         action = CodeAction()
-        self.actions.append(action)
+        action.group = group
+        self.actions.insert(index, action)
         self.select(action)
         self.commit_history()
+
+    def _insert_relative(self, anchor: RobotAction, where: str, kind: str):
+        if anchor not in self.actions:
+            return
+        index = self.actions.index(anchor) + (1 if where == "after" else 0)
+        # Start stays first.
+        index = max(1, index)
+        # Inserting beside a group member puts the new item in that group.
+        if kind == "Motion":
+            self._insert_motion(index, anchor.group)
+        else:
+            self._insert_code_action(index, anchor.group)
 
     def _add_curve(self, motion_action: MotionAction):
         previous = self.previous_action(motion_action)
@@ -2577,11 +3120,7 @@ class ActionList:
             self._close_modal()
             idx = self.actions.index(action)
             self.actions.remove(action)
-            if self.selected is action or (
-                isinstance(action, MotionAction)
-                and self._selected_curve is not None
-                and self._selected_curve[0] is action
-            ):
+            if any(action is a for a in self._multi):
                 self.select(self.actions[min(idx, len(self.actions) - 1)])
             else:
                 self._rebuild_list()
@@ -2650,26 +3189,494 @@ class ActionList:
 
     def _handle_reorder_start(self, e: ft.OnReorderEvent):
         idx = e.old_index
-        if idx is None or idx <= 0 or idx >= len(self.actions):
+        if idx is None or not 0 < idx < len(self._display):
             return
-        self.actions[idx]._dragging = True
+        self._display[idx][1]._dragging = True
         self._rebuild_list()
 
+    def _clear_dragging(self):
+        for item in [*self.actions, *self._groups()]:
+            item._dragging = False
+
     def _handle_reorder_end(self, e: ft.OnReorderEvent):
-        for action in self.actions:
-            action._dragging = False
+        self._clear_dragging()
         self._rebuild_list()
 
     def _handle_reorder(self, e: ft.OnReorderEvent):
-        if e.old_index == 0 or e.new_index == 0:
+        """Move a row; a group header moves its whole group.
+
+        A dropped action joins the group of the row it lands in front of.
+        Groups don't nest, so a group dropped inside another lands before it.
+        """
+        self._clear_dragging()
+        rows = self._display
+        old, new = e.old_index, e.new_index
+        if old is None or new is None or old == 0 or new == 0 or old >= len(rows):
             self._rebuild_list()
             return
-        items = self.actions[:]
-        item = items.pop(e.old_index)
-        items.insert(e.new_index, item)
-        self.actions = items
-        for action in self.actions:
-            action._dragging = False
+        kind, obj = rows[old]
+        moving = self._group_members(obj) if kind == "group" else [obj]
+        rest = rows[:old] + rows[old + 1 :]
+        target = rest[new] if new < len(rest) else None
+        join = None
+        if target is None:
+            before = None
+        elif target[0] == "group":
+            before = self._group_members(target[1])[0]
+        else:
+            before = target[1]
+            if kind == "action":
+                join = before.group
+            elif before.group is not None:
+                before = self._group_members(before.group)[0]
+        if before is not None and any(before is m for m in moving):
+            self._rebuild_list()
+            return
+        remaining = [a for a in self.actions if not any(a is m for m in moving)]
+        index = len(remaining) if before is None else next(
+            i for i, a in enumerate(remaining) if a is before
+        )
+        if kind == "action":
+            obj.group = join
+        self.actions = remaining[:index] + moving + remaining[index:]
         self._rebuild_list()
         self._notify_scene()
         self.commit_history()
+
+    # --- Groups -------------------------------------------------------------
+
+    def _toggle_group_collapsed(self, group: ActionGroup):
+        group.collapsed = not group.collapsed
+        # View state: saved with the routine, but not its own undo step.
+        self.history.replace_current(self.snapshot())
+        self._mark_dirty()
+        self._rebuild_list()
+
+    def _groupable(self, items: list[RobotAction]) -> list[RobotAction] | None:
+        """Actions a new group over ``items`` would hold, or None if not allowed.
+
+        Groups the selection touches are absorbed whole, and the result must be
+        consecutive and exclude Start.
+        """
+        if not items or any(isinstance(a, StartAction) for a in items):
+            return None
+        members = list(items)
+        for action in items:
+            if action.group is not None:
+                members += [
+                    m for m in self._group_members(action.group) if not any(m is x for x in members)
+                ]
+        indices = sorted(self.actions.index(a) for a in members)
+        if indices[-1] - indices[0] + 1 != len(indices):
+            return None
+        result = [self.actions[i] for i in indices]
+        first = result[0].group
+        if first is not None and all(a.group is first for a in result):
+            return None
+        return result
+
+    def _unused_group_name(self) -> str:
+        taken = {g.name for g in self._groups()}
+        n = len(taken) + 1
+        while f"Group {n}" in taken:
+            n += 1
+        return f"Group {n}"
+
+    def _show_group_dialog(self, rename: ActionGroup | None = None):
+        if rename is None:
+            members = self._groupable(self._multi) if self._selected_curve is None else None
+            if members is None:
+                self._toast("Select consecutive actions (not Start or curves) to group them.")
+                return
+            touched = []
+            for a in members:
+                if a.group is not None and not any(a.group is g for g in touched):
+                    touched.append(a.group)
+            default = touched[0].name if len(touched) == 1 else self._unused_group_name()
+        else:
+            members = None
+            default = rename.name
+
+        field = _text_field("Name", default, None, width=300)
+        field.autofocus = True
+
+        def submit(e):
+            name = (field.value or "").strip() or "Group"
+            self._close_modal()
+            if rename is not None:
+                rename.name = name
+                self._rebuild_list()
+                if self._selected_group is rename:
+                    self.refresh_editor()
+            else:
+                group = ActionGroup(name)
+                for action in members:
+                    action.group = group
+                self.select_many(members, group=group)
+            self.commit_history()
+
+        field.on_submit = submit
+        self._show_modal(
+            "Rename group" if rename is not None else "New group",
+            field,
+            [
+                ft.OutlinedButton("Cancel", on_click=lambda e: self._close_modal()),
+                green_button("Rename" if rename is not None else "Group", on_click=submit),
+            ],
+        )
+
+    def _ungroup(self, group: ActionGroup | None):
+        if group is None:
+            return
+        members = self._group_members(group)
+        for action in members:
+            action.group = None
+        if self._selected_group is group:
+            self.select_many(members)
+        else:
+            self._rebuild_list()
+        self.commit_history()
+
+    def _confirm_delete_group(self, group: ActionGroup):
+        members = self._group_members(group)
+
+        def ungroup(e):
+            self._close_modal()
+            self._ungroup(group)
+
+        def confirm(e):
+            self._close_modal()
+            idx = self.actions.index(members[0])
+            self.actions = [a for a in self.actions if a.group is not group]
+            self.select(self.actions[min(idx, len(self.actions) - 1)])
+            self.commit_history()
+
+        count = len(members)
+        self._show_modal(
+            "Delete group?",
+            ft.Container(
+                width=300,
+                content=ft.Text(
+                    f'Remove "{group.name}" and its {count} item{"s" if count != 1 else ""} '
+                    "from the routine?"
+                ),
+            ),
+            [
+                ft.OutlinedButton("Cancel", on_click=lambda e: self._close_modal()),
+                ft.OutlinedButton("Ungroup", on_click=ungroup),
+                red_button("Delete", on_click=confirm),
+            ],
+        )
+
+    # --- Context menu -------------------------------------------------------
+
+    def _target_selected(self, target) -> bool:
+        """Whether a right-clicked row is part of the current selection."""
+        if isinstance(target, tuple):
+            return self.curve_selected(*target)
+        if isinstance(target, ActionGroup):
+            return self._selected_group is target
+        return self._selected_curve is None and any(target is a for a in self._multi)
+
+    def _menu_spec(self, target) -> list:
+        """Items for a row's right-click menu (see ``_ListMenu.sync``)."""
+        clip = _clipboard["data"]
+        selected = self._target_selected(target)
+        if isinstance(target, tuple):
+            motion, _ = target
+            count = len(self._multi_curves) if selected else 1
+            keeps_none = count >= len(motion.motion.curves)
+            return [
+                ("Cut", ft.Icons.CONTENT_CUT, ("cut",), "⌘X", keeps_none),
+                ("Copy", ft.Icons.CONTENT_COPY, ("copy",), "⌘C", False),
+                ("Paste after", ft.Icons.CONTENT_PASTE, ("paste",), "⌘V", clip is None),
+                None,
+                _delete_entry(count, keeps_none),
+            ]
+        if isinstance(target, ActionGroup):
+            items = self._group_members(target)
+        else:
+            items = self._multi if selected else [target]
+        copyable = any(not isinstance(a, StartAction) for a in items)
+        spec = [
+            ("Cut", ft.Icons.CONTENT_CUT, ("cut",), "⌘X", not copyable),
+            ("Copy", ft.Icons.CONTENT_COPY, ("copy",), "⌘C", not copyable),
+            ("Paste after", ft.Icons.CONTENT_PASTE, ("paste",), "⌘V", clip is None),
+            None,
+        ]
+        if isinstance(target, ActionGroup):
+            return spec + [
+                ("Rename group…", ft.Icons.EDIT, ("rename",), None, False),
+                ("Ungroup", ft.Icons.FOLDER_OFF, ("ungroup",), None, False),
+                None,
+                ("Delete group", ft.Icons.DELETE_OUTLINE, ("delete",), None, False, True),
+            ]
+        spec.append(
+            (
+                "Group selection…" if len(items) > 1 else "Group…",
+                ft.Icons.CREATE_NEW_FOLDER,
+                ("group",),
+                "⌘G",
+                self._groupable(items) is None,
+            )
+        )
+        if target.group is not None:
+            spec.append(("Ungroup", ft.Icons.FOLDER_OFF, ("ungroup",), None, False))
+        # Nothing may precede Start.
+        no_before = not target.deletable
+        return spec + [
+            None,
+            ("Insert motion before", ft.Icons.ROUTE, ("insert", "before", "Motion"), None, no_before),
+            ("Insert action before", ft.Icons.CODE, ("insert", "before", "Action"), None, no_before),
+            ("Insert motion after", ft.Icons.ROUTE, ("insert", "after", "Motion"), None, False),
+            ("Insert action after", ft.Icons.CODE, ("insert", "after", "Action"), None, False),
+            None,
+            _delete_entry(sum(1 for a in items if a.deletable), not copyable),
+        ]
+
+    def _handle_menu(self, target, data: tuple):
+        op = data[0]
+        if op == "insert":
+            self._insert_relative(target, data[1], data[2])
+            return
+        if not self._target_selected(target):
+            if isinstance(target, tuple):
+                self.select_curve(*target)
+            elif isinstance(target, ActionGroup):
+                self.select_many(self._group_members(target), group=target)
+            else:
+                self.select(target)
+        if op == "copy":
+            self.copy_selection()
+        elif op == "cut":
+            self.cut_selection()
+        elif op == "paste":
+            self.paste()
+        elif op == "group":
+            self._show_group_dialog()
+        elif op == "rename":
+            self._show_group_dialog(rename=target)
+        elif op == "ungroup":
+            self._ungroup(target if isinstance(target, ActionGroup) else target.group)
+        elif op == "delete":
+            self.delete_selection()
+
+    def delete_selection(self) -> bool:
+        """Remove the selected curves, group or actions; a toast offers Undo."""
+        if self.selected is None:
+            return False
+        label = self._selection_label()
+        if self._selected_curve is not None:
+            motion = self._selected_curve[0]
+            picked = sorted(self._multi_curves)
+            if len(picked) >= len(motion.motion.curves):
+                self._toast("A motion needs at least one curve. Delete the motion instead.")
+                return False
+            for i in reversed(picked):
+                motion.motion.curves.pop(i)
+            prev = self.previous_action(motion)
+            motion.motion.enforce_g1(previous_pose=prev.end_pose() if prev is not None else None)
+            self._set_selection_state(
+                motion, (motion, min(picked[0], len(motion.motion.curves) - 1))
+            )
+            self._apply_selection(True)
+        else:
+            if self._selected_group is not None:
+                removed = self._group_members(self._selected_group)
+            else:
+                removed = [a for a in self._multi if a.deletable]
+            if not removed:
+                return False
+            first_index = self.actions.index(removed[0])
+            self.actions = [a for a in self.actions if not any(a is r for r in removed)]
+            self.select(self.actions[min(first_index, len(self.actions)) - 1])
+        self.commit_history()
+        self._toast(f"Deleted {label}", undo=True)
+        return True
+
+    # --- Clipboard ----------------------------------------------------------
+
+    def _on_list_key_down(self, e: ft.KeyDownEvent):
+        if _TextFocus.field is not None or self._modal is not None:
+            return
+        if e.key in ("Delete", "Backspace") and not keys.command_held():
+            self.delete_selection()
+            return
+        if not keys.command_held():
+            return
+        handler = {
+            "C": self.copy_selection,
+            "X": self.cut_selection,
+            "V": self.paste,
+            "G": self._show_group_dialog,
+        }.get((e.key or "").upper())
+        if handler is not None:
+            handler()
+
+    def _toast(self, message: str, *, undo: bool = False):
+        """Short notice that dismisses itself, optionally offering Undo."""
+        if self.page is None:
+            return
+        self.page.show_dialog(
+            ft.SnackBar(
+                content=ft.Text(message, color=ft.Colors.ON_SURFACE),
+                action=ft.SnackBarAction(
+                    label="Undo", text_color=ACCENT, on_click=lambda e: self.undo()
+                ) if undo else None,
+                bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                shape=ft.RoundedRectangleBorder(
+                    radius=10, side=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT)
+                ),
+                behavior=ft.SnackBarBehavior.FLOATING,
+                width=440,
+                duration=ft.Duration(milliseconds=3000 if undo else 2500),
+            )
+        )
+
+    def _selection_label(self) -> str:
+        if self._selected_curve is not None:
+            n = len(self._multi_curves)
+            return f"Curve {self._multi_curves[0] + 1}" if n == 1 else f"{n} curves"
+        if self._selected_group is not None:
+            return f'group "{self._selected_group.name}"'
+        actions = [a for a in self._multi if not isinstance(a, StartAction)]
+        return actions[0].name if len(actions) == 1 else f"{len(actions)} items"
+
+    def _selection_clip(self) -> dict | None:
+        if self._selected_curve is not None:
+            motion = self._selected_curve[0]
+            return {
+                "kind": "curves",
+                "items": [curve_to_json(motion.motion.curves[i]) for i in self._multi_curves],
+            }
+        actions = [a for a in self._multi if not isinstance(a, StartAction)]
+        if not actions:
+            if self._multi:
+                self._toast("Start can't be copied.")
+            return None
+        items = action_items_to_json(actions)
+        # Keep a group only when all of it was copied.
+        for action, item in zip(actions, items):
+            group = action.group
+            if group is not None and not all(
+                any(m is a for a in actions) for m in self._group_members(group)
+            ):
+                item.pop("group", None)
+        return {"kind": "actions", "items": items}
+
+    def copy_selection(self) -> bool:
+        clip = self._selection_clip()
+        if clip is None:
+            return False
+        _clipboard["data"] = clip
+        self._toast(f"Copied {self._selection_label()}")
+        self._rebuild_list()
+        return True
+
+    def cut_selection(self) -> bool:
+        if self._selected_curve is not None:
+            motion = self._selected_curve[0]
+            picked = list(self._multi_curves)
+            if len(picked) >= len(motion.motion.curves):
+                self._toast("A motion needs at least one curve. Cut the motion instead.")
+                return False
+            label = self._selection_label()
+            _clipboard["data"] = self._selection_clip()
+            for i in sorted(picked, reverse=True):
+                motion.motion.curves.pop(i)
+            prev = self.previous_action(motion)
+            motion.motion.enforce_g1(previous_pose=prev.end_pose() if prev is not None else None)
+            first = min(picked)
+            # Leave the curve before the gap selected so ⌘V puts them back.
+            self._set_selection_state(motion, (motion, first - 1) if first > 0 else None)
+            self._apply_selection(True)
+            self.commit_history()
+            self._toast(f"Cut {label}")
+            return True
+
+        clip = self._selection_clip()
+        if clip is None:
+            return False
+        label = self._selection_label()
+        removed = [a for a in self._multi if not isinstance(a, StartAction)]
+        first_index = self.actions.index(removed[0])
+        first_group = removed[0].group
+        _clipboard["data"] = clip
+        self.actions = [a for a in self.actions if not any(a is r for r in removed)]
+        # Select what preceded the cut so ⌘V puts it back in place.
+        anchor = self.actions[first_index - 1]
+        if anchor.group is not None and anchor.group is not first_group:
+            self.select_many(self._group_members(anchor.group), group=anchor.group)
+        else:
+            self.select(anchor)
+        self.commit_history()
+        self._toast(f"Cut {label}")
+        return True
+
+    def paste(self) -> bool:
+        clip = _clipboard["data"]
+        if clip is None:
+            self._toast("Nothing to paste.")
+            return False
+        if clip["kind"] == "curves":
+            return self._paste_curves(clip["items"])
+        return self._paste_actions(clip["items"])
+
+    def _paste_curves(self, items: list[dict]) -> bool:
+        if self._selected_curve is not None:
+            motion = self._selected_curve[0]
+            at = max(self._multi_curves) + 1
+        elif len(self._multi) == 1 and isinstance(self.selected, MotionAction):
+            motion = self.selected
+            at = len(motion.motion.curves)
+        else:
+            self._toast("Curves can only be pasted into a motion. Select a motion or one of its curves.")
+            return False
+        new = [curve_from_json(c) for c in items]
+        motion.motion.curves[at:at] = new
+        prev = self.previous_action(motion)
+        motion.motion.enforce_g1(previous_pose=prev.end_pose() if prev is not None else None)
+        self._propagate_g1_from_action(motion)
+        self._set_selection_state(
+            motion, (motion, at + len(new) - 1), curves=list(range(at, at + len(new)))
+        )
+        self._apply_selection(True)
+        self.commit_history()
+        return True
+
+    def _paste_actions(self, items: list[dict]) -> bool:
+        if self._selected_curve is not None:
+            self._toast("Can't paste actions into a motion's curves. Select an action to paste after it.")
+            return False
+        new = action_items_from_json(items)
+        if not new:
+            return False
+        has_groups = any(a.group is not None for a in new)
+        index, join = len(self.actions), None
+        if self._multi:
+            last = self._multi[-1]
+            index = self.actions.index(last) + 1
+            group = last.group
+            if group is not None:
+                if self._selected_group is group or has_groups:
+                    # Groups don't nest: land after the whole group.
+                    index = self.actions.index(self._group_members(group)[-1]) + 1
+                else:
+                    join = group
+        for action in new:
+            if action.group is None:
+                action.group = join
+        self.actions[index:index] = new
+        # Keep the path continuous into, through and out of the pasted block.
+        for source in [self.previous_action(new[0]), *new]:
+            if source is not None and source.end_pose() is not None:
+                self._propagate_g1_from_action(source)
+        first_group = new[0].group
+        whole_group = (
+            first_group is not None
+            and join is None
+            and all(a.group is first_group for a in new)
+        )
+        self.select_many(new, group=first_group if whole_group else None)
+        self.commit_history()
+        return True

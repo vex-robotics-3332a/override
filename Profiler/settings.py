@@ -7,6 +7,8 @@ from copy import deepcopy
 from pathlib import Path
 
 SETTINGS_PATH = Path(__file__).resolve().parent / "settings.json"
+# Uploaded robot pictures are copied here; settings.json stores the file name.
+ROBOT_IMAGE_DIR = SETTINGS_PATH.parent
 
 _DEFAULT_ROBOT = {
     "max_speed": 76.38162268,
@@ -124,6 +126,52 @@ def get_sd_card_path() -> str:
 def save_sd_card_path(sd_card_path: str) -> None:
     data = load_settings()
     data["sd_card_path"] = str(sd_card_path or "")
+    save_settings(data)
+
+
+def _normalize_robot_image(raw) -> dict | None:
+    """Placement of the optional robot picture, or None when there isn't one."""
+    if not isinstance(raw, dict) or not isinstance(raw.get("file"), str) or not raw["file"]:
+        return None
+    out = {"file": raw["file"]}
+    defaults = {
+        "aspect": 1.0,
+        "width_in": 18.0,
+        "offset_x": 0.0,
+        "offset_y": 0.0,
+        "rotation": 0.0,
+        "opacity": 0.85,
+    }
+    for key, default in defaults.items():
+        try:
+            out[key] = float(raw.get(key, default))
+        except (TypeError, ValueError):
+            out[key] = default
+    return out
+
+
+def get_robot_image() -> dict | None:
+    return _normalize_robot_image(load_settings().get("robot_image"))
+
+
+def save_robot_image(image: dict | None) -> None:
+    data = load_settings()
+    data["robot_image"] = _normalize_robot_image(image)
+    save_settings(data)
+
+
+def get_robot_body_opacity() -> float:
+    """Strength of the green body rectangle on the field, 0–1."""
+    try:
+        value = float(load_settings().get("robot_body_opacity", 1.0))
+    except (TypeError, ValueError):
+        return 1.0
+    return min(1.0, max(0.0, value))
+
+
+def save_robot_body_opacity(value: float) -> None:
+    data = load_settings()
+    data["robot_body_opacity"] = min(1.0, max(0.0, float(value)))
     save_settings(data)
 
 

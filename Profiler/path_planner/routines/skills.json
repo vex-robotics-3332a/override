@@ -1,0 +1,354 @@
+{
+  "version": 1,
+  "name": "skills",
+  "path": "autos/skills.rs",
+  "actions": [
+    {
+      "type": "start",
+      "name": "Start",
+      "x": 8.893806353213515,
+      "y": 60.17613648469569,
+      "heading": 180.0,
+      "time": 0.0
+    },
+    {
+      "type": "action",
+      "name": "Action 1",
+      "code": "robot.lift.cascade_to_height(200.0);\nrobot.toggle.auto_toggle_loop(Duration::from_millis(700)).await;\n",
+      "time": 0.0,
+      "group": {
+        "id": 1,
+        "name": "Scoring first pin",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "motion",
+      "id": 1,
+      "g1_continuity": true,
+      "start_speed": 20.0,
+      "end_speed": 20.0,
+      "curves": [
+        {
+          "points": [
+            [
+              8.893806353213515,
+              60.17613648469569
+            ],
+            [
+              12.835007029165865,
+              60.17613648469569
+            ],
+            [
+              16.64988601385557,
+              60.11190325833118
+            ],
+            [
+              19.870608596704436,
+              55.69842051736586
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": true
+        }
+      ],
+      "code": "robot.chassis.end_motion_when(|| robot.lift.at_alliance_goal(), true).await;",
+      "timeout": null,
+      "group": {
+        "id": 1,
+        "name": "Scoring first pin",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "action",
+      "name": "Action 2",
+      "code": "robot.lift.cascade_to_height(50.0);\nsleep(Duration::from_millis(40)).await;\nrobot.lift.claw_open();\nsleep(Duration::from_millis(100)).await;",
+      "time": 140.0,
+      "group": {
+        "id": 1,
+        "name": "Scoring first pin",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "action",
+      "name": "Action 3",
+      "code": "robot.lift.matchload();",
+      "time": 0.0,
+      "group": {
+        "id": 2,
+        "name": "Getting wall pin",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "motion",
+      "id": 2,
+      "g1_continuity": true,
+      "start_speed": 0.0,
+      "end_speed": 0.0,
+      "curves": [
+        {
+          "points": [
+            [
+              19.870608596704436,
+              55.69842051736586
+            ],
+            [
+              17.22400155588597,
+              59.325170166333606
+            ],
+            [
+              17.578608168145113,
+              61.7393522275766
+            ],
+            [
+              18.339138466076037,
+              64.26792412066025
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": false
+        }
+      ],
+      "code": "",
+      "timeout": null,
+      "group": {
+        "id": 2,
+        "name": "Getting wall pin",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "motion",
+      "id": 3,
+      "g1_continuity": true,
+      "start_speed": 20.0,
+      "end_speed": 10.0,
+      "curves": [
+        {
+          "points": [
+            [
+              18.339138466076037,
+              64.26792412066025
+            ],
+            [
+              17.485164650321618,
+              61.42867604097081
+            ],
+            [
+              16.132066313197683,
+              58.874684280962555
+            ],
+            [
+              15.434663064315362,
+              57.00431833711555
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": true
+        },
+        {
+          "points": [
+            [
+              15.434663064315362,
+              57.00431833711555
+            ],
+            [
+              15.04539926238603,
+              55.96035165146009
+            ],
+            [
+              14.181728567521983,
+              53.92475875115797
+            ],
+            [
+              13.596758779002345,
+              53.6
+            ]
+          ],
+          "max_speed": 70.0,
+          "reversed": true
+        }
+      ],
+      "code": "",
+      "timeout": null,
+      "group": {
+        "id": 2,
+        "name": "Getting wall pin",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "action",
+      "name": "Action 4",
+      "code": "robot.chassis.drive_raw_v(-1.0, -6.0, Duration::from_millis(500)).await;\nrobot.lift.claw_close();\nsleep(Duration::from_millis(150)).await;\nrobot.chassis.distance_reset(&robot.dsrs.right, Wall::Bottom).await;\nrobot.chassis.cascade_to_height(400.0);",
+      "time": 500.0,
+      "group": {
+        "id": 2,
+        "name": "Getting wall pin",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "motion",
+      "id": 4,
+      "g1_continuity": true,
+      "start_speed": 10.0,
+      "end_speed": 10.0,
+      "curves": [
+        {
+          "points": [
+            [
+              13.596758779002345,
+              53.6
+            ],
+            [
+              16.642847120849716,
+              55.29110245559627
+            ],
+            [
+              20.319514028384802,
+              62.11491070119469
+            ],
+            [
+              18.58138363365822,
+              67.54579566150889
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": false
+        }
+      ],
+      "code": "",
+      "timeout": null,
+      "group": {
+        "id": 3,
+        "name": "Scoring wall pin",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "motion",
+      "id": 5,
+      "g1_continuity": true,
+      "start_speed": 0.0,
+      "end_speed": 0.0,
+      "curves": [
+        {
+          "points": [
+            [
+              18.58138363365822,
+              67.54579566150889
+            ],
+            [
+              20.410273948868806,
+              61.83132628851118
+            ],
+            [
+              20.90494616004252,
+              60.53503051480169
+            ],
+            [
+              22.225,
+              56.6955
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": true
+        }
+      ],
+      "code": "robot.chassis.end_motion_when(|| robot.lift.at_alliance_goal(), true).await;",
+      "timeout": null,
+      "group": {
+        "id": 3,
+        "name": "Scoring wall pin",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "action",
+      "name": "Action 5",
+      "code": "robot.lift.matchload();\nsleep(Duration::from_millis(150));",
+      "time": 0.0,
+      "group": {
+        "id": 3,
+        "name": "Scoring wall pin",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "motion",
+      "id": 6,
+      "g1_continuity": true,
+      "start_speed": 10.0,
+      "end_speed": 10.0,
+      "curves": [
+        {
+          "points": [
+            [
+              22.225,
+              56.6955
+            ],
+            [
+              21.73730923614466,
+              58.114005452527486
+            ],
+            [
+              21.289199471747487,
+              62.64795295595128
+            ],
+            [
+              21.60941443242889,
+              69.99601071580632
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": false
+        }
+      ],
+      "code": "",
+      "timeout": null
+    },
+    {
+      "type": "action",
+      "name": "Action 6",
+      "code": "robot.chassis.distance_reset(&robot.dsrs.left, Wall::Left).await;",
+      "time": 0.0
+    },
+    {
+      "type": "motion",
+      "id": 7,
+      "g1_continuity": true,
+      "start_speed": 0.0,
+      "end_speed": 0.0,
+      "curves": [
+        {
+          "points": [
+            [
+              21.60941443242889,
+              69.99601071580632
+            ],
+            [
+              21.348193290568922,
+              64.00169978667982
+            ],
+            [
+              31.027024263267666,
+              60.79753410388729
+            ],
+            [
+              40.994381092555045,
+              53.61687948151331
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": true
+        }
+      ],
+      "code": "robot.lift.auto_clamp_task(3000).await;\nsleep(Duration::from_millis(200)).await;\nrobot.chassis.end_motion();",
+      "timeout": null
+    }
+  ]
+}

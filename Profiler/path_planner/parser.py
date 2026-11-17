@@ -67,7 +67,7 @@ def export_routine_macro(routine, code_root: str | None = None) -> Path:
             if type == "action":
                 code = str(action.get("code") or "")
                 if code:
-                    macro.write(code)
+                    macro.write("\t" + code)
                     if not code.endswith("\n"):
                         macro.write("\n")
             macro.write("\n")

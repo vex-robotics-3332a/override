@@ -11,5 +11,15 @@
   },
   "code_root": "~/code/vex/override/chroma-temp/src",
   "sd_card_path": "/Volumes/ROBOT_SD",
-  "field_background": "skills"
+  "field_background": "skills",
+  "robot_image": {
+    "file": "robot_image.png",
+    "aspect": 1.1094257854821234,
+    "width_in": 17.084957154232082,
+    "offset_x": 0.2464212644518322,
+    "offset_y": 0.03979212275160941,
+    "rotation": 270.0,
+    "opacity": 0.5489021804966686
+  },
+  "robot_body_opacity": 0.0
 }

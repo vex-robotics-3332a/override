@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from bisect import bisect_right
-from math import degrees
+from math import degrees, hypot
 
 # Insert interpolated samples when profile gaps exceed this (ms).
 _DENSE_STEP_MS = 16.0
@@ -28,10 +28,19 @@ def _lerp_sample(a, b, u: float):
 class Timeline:
     """Sorted (t_ms, x, y, heading_deg) samples for the full routine."""
 
-    def __init__(self, samples: list[tuple[float, float, float, float]] | None = None):
+    def __init__(
+        self,
+        samples: list[tuple[float, float, float, float]] | None = None,
+        spans: dict[str, tuple[float, float]] | None = None,
+    ):
         raw = samples or [(0.0, 0.0, 0.0, 0.0)]
         self.samples = _normalize_samples(raw)
         self._times = [s[0] for s in self.samples]
+        # action.key -> (start_ms, end_ms) for each motion.
+        self.spans = spans or {}
+
+    def span_of(self, action) -> tuple[float, float] | None:
+        return self.spans.get(getattr(action, "key", None))
 
     @property
     def duration_ms(self) -> float:
@@ -95,11 +104,57 @@ def _hold(samples, t_offset: float, pose, dwell_ms: float) -> float:
     return t_offset
 
 
+def _polyline_length(points) -> float:
+    return sum(hypot(b[0] - a[0], b[1] - a[1]) for a, b in zip(points, points[1:]))
+
+
+def curve_boundaries(motion) -> list[float]:
+    """Profile time (ms, from motion start) at each curve join, plus 0 and the end.
+
+    Profile samples don't record which curve they belong to, so joins are
+    placed where the distance driven matches the curves' cumulative arc length.
+    """
+    profile = motion.profile or []
+    duration = float(motion.time or (profile[-1]["t"] if profile else 0.0))
+    lengths = [_polyline_length(curve.sample(48)) for curve in motion.curves]
+    total = sum(lengths)
+    if len(lengths) <= 1 or total <= 0:
+        return [0.0, duration]
+
+    targets = []
+    acc = 0.0
+    for length in lengths[:-1]:
+        acc += length
+        targets.append(acc / total)
+
+    if len(profile) < 2:
+        return [0.0, *(f * duration for f in targets), duration]
+
+    times = [float(p["t"]) for p in profile]
+    dist = [0.0]
+    for a, b in zip(profile, profile[1:]):
+        dist.append(dist[-1] + hypot(b["p"][0] - a["p"][0], b["p"][1] - a["p"][1]))
+    driven = dist[-1]
+    if driven <= 0:
+        return [0.0, *(f * duration for f in targets), duration]
+
+    out = [0.0]
+    for f in targets:
+        s = f * driven
+        i = max(0, min(bisect_right(dist, s) - 1, len(dist) - 2))
+        seg = dist[i + 1] - dist[i]
+        u = (s - dist[i]) / seg if seg > 0 else 0.0
+        out.append(times[i] + (times[i + 1] - times[i]) * u)
+    out.append(duration)
+    return out
+
+
 def build_routine_timeline(actions) -> Timeline:
     """Stitch start dwell, code-action waits, and motion profiles into one path."""
     from actions import MotionAction, StartAction
 
     samples: list[tuple[float, float, float, float]] = []
+    spans: dict[str, tuple[float, float]] = {}
     t_offset = 0.0
     pose = (24.0, 24.0, 0.0)
 
@@ -122,6 +177,7 @@ def build_routine_timeline(actions) -> Timeline:
                 if end is not None:
                     pose = end
                     samples.append((t_offset + elapsed, end[0], end[1], end[2]))
+                spans[action.key] = (t_offset, t_offset + elapsed)
                 t_offset += elapsed
                 continue
 
@@ -134,7 +190,9 @@ def build_routine_timeline(actions) -> Timeline:
             if end is not None:
                 pose = end
             last_t = float(profile[-1]["t"])
+            start = t_offset
             t_offset += float(action.motion.time) if action.motion.time else last_t
+            spans[action.key] = (start, t_offset)
             continue
 
         # Code actions (and anything else without its own path) hold position.
@@ -143,4 +201,4 @@ def build_routine_timeline(actions) -> Timeline:
     if not samples:
         samples = [(0.0, 24.0, 24.0, 0.0)]
 
-    return Timeline(samples)
+    return Timeline(samples, spans)

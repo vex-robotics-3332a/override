@@ -152,13 +152,49 @@ def action_from_json(data: dict[str, Any]):
     raise ValueError(f"Unknown action type: {kind!r}")
 
 
+def action_items_to_json(actions: list, *, include_profile_time: bool = True) -> list[dict[str, Any]]:
+    """Serialize actions in order; grouped ones carry ``group`` {id, name, collapsed}.
+
+    Group ids are only meaningful within one list (members share an id).
+    """
+    group_ids: dict[int, int] = {}
+    items = []
+    for action in actions:
+        item = action_to_json(action, include_profile_time=include_profile_time)
+        group = getattr(action, "group", None)
+        if group is not None:
+            gid = group_ids.setdefault(id(group), len(group_ids) + 1)
+            item["group"] = {"id": gid, "name": group.name, "collapsed": bool(group.collapsed)}
+        items.append(item)
+    return items
+
+
+def action_items_from_json(raw: list[dict[str, Any]]) -> list:
+    """Inverse of ``action_items_to_json``: fresh actions with shared group objects."""
+    from actions import ActionGroup, StartAction
+
+    groups: dict[Any, ActionGroup] = {}
+    actions = []
+    for item in raw:
+        action = action_from_json(item)
+        info = item.get("group")
+        if isinstance(info, dict) and not isinstance(action, StartAction):
+            gid = info.get("id")
+            if gid not in groups:
+                groups[gid] = ActionGroup(
+                    str(info.get("name") or "Group"),
+                    collapsed=bool(info.get("collapsed", False)),
+                )
+            action.group = groups[gid]
+        actions.append(action)
+    return actions
+
+
 def actions_to_json(actions: list, *, include_profile_time: bool = True) -> dict[str, Any]:
     """Serialize an action list document (current state of one routine)."""
     return {
         "version": ACTIONS_VERSION,
-        "actions": [
-            action_to_json(a, include_profile_time=include_profile_time) for a in actions
-        ],
+        "actions": action_items_to_json(actions, include_profile_time=include_profile_time),
     }
 
 
@@ -172,9 +208,9 @@ def actions_from_json(data: dict[str, Any] | None) -> list:
         from actions import StartAction
 
         return [StartAction()]
-    actions = [action_from_json(item) for item in raw]
+    actions = action_items_from_json(raw)
     # Guarantee a Start action at index 0.
-    from actions import CodeAction, MotionAction, StartAction
+    from actions import CodeAction, MotionAction, StartAction, normalize_groups
 
     if not actions or not isinstance(actions[0], StartAction):
         actions.insert(0, StartAction())
@@ -188,6 +224,7 @@ def actions_from_json(data: dict[str, Any] | None) -> list:
         elif isinstance(action, CodeAction):
             code_i += 1
             action.set_action_id(code_i)
+    normalize_groups(actions)
     return actions
 
 
@@ -211,9 +248,7 @@ def routine_to_disk_json(routine) -> dict[str, Any]:
         "version": ROUTINE_FILE_VERSION,
         "name": name,
         "path": routine.path,
-        "actions": [
-            action_to_json(a, include_profile_time=False) for a in actions
-        ],
+        "actions": action_items_to_json(actions, include_profile_time=False),
     }
 
 

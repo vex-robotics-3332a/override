@@ -2,12 +2,11 @@
 use vexide::math::Angle;
 use vexide::prelude::*;
 use crate::helpers::{CartesianVector, Pose};
+use crate::MM_PER_INCH;
 
 /// Inner wall-to-wall field size, in inches.
 pub const FIELD_WIDTH: f64 = 140.5;
 pub const FIELD_HEIGHT: f64 = 140.5;
-
-const MM_PER_INCH: f64 = 25.4;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Wall {
@@ -52,10 +51,10 @@ impl Dsr {
     pub fn new(sensor: DistanceSensor, offset: Pose, distance_offset: f64) -> Self {
         Self { sensor, offset, distance_offset }
     }
-    /// Corrected distance to the detected object in inches, or `None` if nothing is detected.
+    /// Corrected distance to the detected object in inches, or `None` if nothing is detected or the reading is invalid (exactly 0).
     pub fn distance(&self) -> Option<f64> {
         let object = self.sensor.object().ok()??;
-        Some(object.distance as f64 / MM_PER_INCH + self.distance_offset)
+        (object.distance != 0).then(|| object.distance as f64 / MM_PER_INCH + self.distance_offset)
     }
 
     /// `pose` with the axis perpendicular to `wall` replaced by the sensor reading.

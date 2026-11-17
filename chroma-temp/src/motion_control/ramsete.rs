@@ -173,6 +173,8 @@ impl Chassis {
         );
 
         profile.start();
+        self.end_requested.set(false);
+        self.driving.set(true);
         let mut left_end_zone = false;
         loop {
             let time = clock.elapsed().as_millis();
@@ -230,7 +232,7 @@ impl Chassis {
             // Only arm the distance exit after leaving the end zone, so paths that end where they start don't exit immediately.
             let near_end = profile.distance_to_end(pose.x, pose.y) < self.config.exit_range;
             left_end_zone |= !near_end;
-            if profile.timed_out() || (left_end_zone && near_end) {
+            if profile.timed_out() || (left_end_zone && near_end) || self.end_requested.get() {
                 break;
             }
 
@@ -239,6 +241,7 @@ impl Chassis {
 
             sleep(SLEEP_INTERVAL).await;
         }
+        self.driving.set(false);
 
         // A nonzero end speed leaves the last command running for whatever drives next.
         if profile.ends_stopped() {

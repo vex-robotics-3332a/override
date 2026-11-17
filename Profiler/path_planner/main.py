@@ -3,6 +3,7 @@ from pathlib import Path
 
 import flet as ft
 
+import keys
 from actions import CanvasCurve, RobotAction
 from render import FieldCanvas
 from sidebar import Sidebar
@@ -25,15 +26,20 @@ def main(page: ft.Page):
         start = action_list.start_action()
         curves = []
         for motion_action in action_list.motion_actions():
+            dimmed = action_list.motion_dimmed(motion_action)
             for i, _ in enumerate(motion_action.motion.curves):
-                selected = action_list._selected_curve == (motion_action, i)
-                curves.append((CanvasCurve(motion_action, i), selected))
+                selected = action_list.curve_selected(motion_action, i)
+                canvas_curve = CanvasCurve(motion_action, i)
+                canvas_curve.dimmed = dimmed
+                curves.append((canvas_curve, selected))
         field.set_scene(
             start.end_pose(),
             curves,
             start_action=start,
             start_selected=(action_list.selected is start),
             robot_specs=sidebar.robot_specs,
+            robot_image=sidebar.robot_image,
+            body_opacity=sidebar.body_opacity,
         )
 
     def on_playback_pose(pose):
@@ -55,6 +61,7 @@ def main(page: ft.Page):
 
     def on_canvas_action_select(target: RobotAction | CanvasCurve):
         action_list = sidebar.action_list
+        action_list.focus_keys()
         if isinstance(target, CanvasCurve):
             action_list.select_curve(target.motion_action, target.curve_index)
         else:
@@ -96,12 +103,26 @@ def main(page: ft.Page):
     sidebar.on_field_background_change = on_field_background_change
 
     page.on_keyboard_event = on_keyboard
+    if page.web:
+        # Otherwise the browser's menu covers the action list's right-click menu.
+        page.run_task(ft.BrowserContextMenu().disable)
     page.add(
-        ft.Row(
+        # The listener sees every key from focused descendants, so held
+        # modifiers (for shift-click) are known wherever focus is. It ignores
+        # `expand`, hence the Container.
+        ft.Container(
             expand=True,
-            spacing=0,
-            vertical_alignment=ft.CrossAxisAlignment.STRETCH,
-            controls=[field.control, sidebar.control],
+            content=ft.KeyboardListener(
+                autofocus=True,
+                on_key_down=lambda e: keys.key_down(e.key),
+                on_key_up=lambda e: keys.key_up(e.key),
+                content=ft.Row(
+                    expand=True,
+                    spacing=0,
+                    vertical_alignment=ft.CrossAxisAlignment.STRETCH,
+                    controls=[field.control, sidebar.control],
+                ),
+            ),
         )
     )
 

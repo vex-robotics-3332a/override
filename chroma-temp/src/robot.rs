@@ -103,6 +103,10 @@ impl Robot {
         else {
             self.toggle.off();
         }
+
+        if controller_state.button_a.is_now_pressed() {
+            self.lift.matchload();
+        }
     }
 }
 

@@ -5,7 +5,7 @@ use alloc::rc::Rc;
 use core::cell::RefCell;
 use core::pin::pin;
 use futures_util::future::{select, Either};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use vexide::task::Task;
 use vexide::{math::Angle, prelude::*, smart::motor::BrakeMode, sync::Mutex};
 
@@ -66,10 +66,14 @@ impl Toggle {
         }
     }
 
-    pub async fn auto_toggle_loop(&mut self) {
+    pub async fn auto_toggle_loop(&mut self, timeout: Duration) {
+        let start = Instant::now();
         loop {
             self.auto_toggle();
-            sleep(Duration::from_millis(10)).await;
+            sleep(SLEEP_INTERVAL).await;
+            if start.elapsed() > timeout {
+                break;
+            }
         }
     }
 }

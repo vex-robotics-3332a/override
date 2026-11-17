@@ -5,6 +5,7 @@ from capture import load_pose_capture
 from history import ActionHistory
 from playback import Timeline, build_routine_timeline
 from robot import RobotSpecs, get_robot_specs, set_robot_specs
+from robot_image import RobotImage, RobotImageEditor, load_robot_image, persist_robot_image
 from serialize import routines_to_json
 from storage import (
     AUTOSAVE_DELAY_S,
@@ -39,9 +40,11 @@ if str(_parent) not in sys.path:
 from settings import (
     get_code_root,
     get_field_background,
+    get_robot_body_opacity,
     get_sd_card_path,
     save_code_root,
     save_field_background,
+    save_robot_body_opacity,
     save_sd_card_path,
 )
 
@@ -113,6 +116,9 @@ class Sidebar:
         self._modal: ft.Control | None = None
         self.robot_specs = get_robot_specs().copy()
         self._robot_draft = self.robot_specs.copy()
+        self.robot_image: RobotImage | None = load_robot_image()
+        self._robot_image_editor: RobotImageEditor | None = None
+        self.body_opacity = get_robot_body_opacity()
         self.on_playback_pose = None
         self.on_visualize_frame = None
         self.on_field_background_change = None
@@ -629,9 +635,54 @@ class Sidebar:
                     ),
                     ft.Container(height=4),
                     green_button("Apply robot changes", on_click=lambda e: self._confirm_apply_robot()),
+                    ft.Divider(height=1),
+                    ft.Text("Robot image", size=14, weight=ft.FontWeight.BOLD),
+                    self._robot_image_section(),
                 ],
             ),
         )
+
+    def _robot_image_section(self) -> ft.Control:
+        self._robot_image_editor = RobotImageEditor(
+            self.robot_image.copy() if self.robot_image is not None else None,
+            lambda: self.robot_specs,
+            self._on_robot_image_change,
+            get_body_opacity=lambda: self.body_opacity,
+        )
+
+        def on_body_opacity(e):
+            self.body_opacity = float(e.control.value)
+            self._robot_image_editor.redraw()
+            if self.on_scene_change is not None:
+                self.on_scene_change()
+
+        body_slider = ft.Slider(
+            min=0.0,
+            max=1.0,
+            value=self.body_opacity,
+            expand=True,
+            on_change=on_body_opacity,
+            on_change_end=lambda e: save_robot_body_opacity(self.body_opacity),
+        )
+        return ft.Column(
+            spacing=10,
+            tight=True,
+            controls=[
+                ft.Row(
+                    spacing=8,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    controls=[ft.Text("Body box opacity", size=12), body_slider],
+                ),
+                self._robot_image_editor.control,
+            ],
+        )
+
+    def _on_robot_image_change(self, image: RobotImage | None, commit: bool):
+        self.robot_image = image
+        if commit:
+            persist_robot_image(image)
+        if self.on_scene_change is not None:
+            self.on_scene_change()
 
     def _field_background_selector(self) -> ft.Control:
         self._field_bg_row.controls = [
@@ -693,6 +744,8 @@ class Sidebar:
             current._refresh_timeline(emit_pose=True)
             if current.selected is not None:
                 current.refresh_editor()
+            if self._robot_image_editor is not None:
+                self._robot_image_editor.redraw()
             if self.on_scene_change is not None:
                 self.on_scene_change()
 
