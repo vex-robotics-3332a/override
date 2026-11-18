@@ -31,6 +31,12 @@ impl Lift {
         }
     }
 
+    pub async fn slam_score(&self) {
+        self.cascade_to_height(200.0);
+        sleep(Duration::from_millis(70)).await;
+        self.matchload();
+    }
+
     pub fn reset_encoder(&self) {
         self.cascade.try_lock().expect("Cascade locked during reset encoder").reset_encoder();
     }
@@ -80,6 +86,7 @@ impl Lift {
         if self.cascade_height().as_degrees() < 280.0 {
             self.spawn_macro(Duration::from_millis(350), |lift| async move {
                 //if lift is at ~20 deg picking up say just a pin, this ensures it doesn't jerk all the way up to pin height
+                sleep(Duration::from_millis(125)).await;
                 lift.move_to(Angle::from_degrees(lift.cascade_height().as_degrees() + 100.0)).await;
             });
         }
@@ -100,7 +107,7 @@ impl Lift {
     pub fn matchload(&self) {
         self.spawn_macro(Duration::from_millis(1000), |lift| async move {
             lift.claw_open();
-            lift.move_to(Angle::from_degrees(270.0)).await;
+            lift.move_to(Angle::from_degrees(280.0)).await;
             println!("matchload pos {}", lift.cascade_height().as_degrees());
         });
     }
@@ -156,8 +163,12 @@ impl Lift {
         let routine = routine(self.clone());
 
         let task = spawn(async move {
-            if let Either::Right(_) = select(pin!(routine), pin!(sleep(timeout))).await {
-                lift.cascade_stop();
+            match select(pin!(routine), pin!(sleep(timeout))).await {
+                Either::Left(_) => {}
+                Either::Right(_) => {
+                    println!("Macro timed out");
+                    lift.cascade_stop();
+                }
             }
         });
 

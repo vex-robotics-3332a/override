@@ -155,7 +155,7 @@ async fn main(peripherals: Peripherals) {
             0.0, 
             f64::INFINITY, 
             12.0, 
-            1.0, 
+            3.0, 
             f64::INFINITY), 
         lift_encoder,
         BrakeMode::Hold);
@@ -166,7 +166,7 @@ async fn main(peripherals: Peripherals) {
     let toggle = Toggle::new(Motor::new(peripherals.port_5, Gearset::Green, Direction::Forward), OpticalSensor::new(peripherals.port_6), "Green");
 
     let mut auto_selector = AutoSelector::new(AUTOS);
-    auto_selector.select("Test");
+    auto_selector.select("Skills");
 
     let mut robot = Robot::new(chassis, controller, lift, dsrs, auto_selector, toggle);
     
@@ -176,6 +176,8 @@ async fn main(peripherals: Peripherals) {
     robot.chassis.init().await;
 
     robot.chassis.set_brake_mode(BrakeMode::Brake);
+
+    robot.autonomous().await;
 
     robot.compete().await;
 }

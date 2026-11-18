@@ -38,8 +38,13 @@ fn test(robot: &mut Robot) -> LocalBoxFuture<'_, ()> {
         Box::pin(autos::test::run(robot))
 }
 
+fn skills(robot: &mut Robot) -> LocalBoxFuture<'_, ()> {
+    Box::pin(autos::skills::run(robot))
+}
+
 pub const AUTOS: &[AutoRoutine] = &[
     AutoRoutine { name: "Test", run: test },
+    AutoRoutine { name: "Skills", run: skills },
 ];
 
 pub struct AutoSelector {
