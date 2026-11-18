@@ -84,7 +84,7 @@ def action_to_json(action, *, include_profile_time: bool = True) -> dict[str, An
     Undo snapshots may keep it via ``include_profile_time=True``.
     """
     # Import locally to avoid a serialize ↔ actions import cycle at module load.
-    from actions import CodeAction, MotionAction, StartAction
+    from actions import BreakpointAction, CodeAction, MotionAction, StartAction
 
     if isinstance(action, StartAction):
         return {
@@ -113,11 +113,13 @@ def action_to_json(action, *, include_profile_time: bool = True) -> dict[str, An
             "code": action.code,
             "time": float(action.time),
         }
+    if isinstance(action, BreakpointAction):
+        return {"type": "breakpoint", "name": action.name, "enabled": bool(action.enabled)}
     raise TypeError(f"Unsupported action type: {type(action)!r}")
 
 
 def action_from_json(data: dict[str, Any]):
-    from actions import CodeAction, MotionAction, StartAction
+    from actions import BreakpointAction, CodeAction, MotionAction, StartAction
 
     kind = data.get("type")
     if kind == "start":
@@ -148,6 +150,11 @@ def action_from_json(data: dict[str, Any]):
             code=str(data.get("code") or ""),
             time=max(0.0, float(data.get("time", 0.0))),
             name=str(data.get("name") or "Action"),
+        )
+    if kind == "breakpoint":
+        return BreakpointAction(
+            enabled=bool(data.get("enabled", True)),
+            name=str(data.get("name") or "Breakpoint"),
         )
     raise ValueError(f"Unknown action type: {kind!r}")
 

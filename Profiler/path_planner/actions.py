@@ -34,6 +34,8 @@ from theme import (
     MONO_FONT,
     MONO_TEXT_STYLE,
     OUTLINED_GREEN_STYLE,
+    RED,
+    RED_HOVER,
     RED_LIGHT,
     blue_button,
     green_button,
@@ -47,6 +49,7 @@ POINT_LABELS = ("P0", "P1", "P2", "P3")
 CREATABLE_ACTION_TYPES: dict[str, str] = {
     "Motion": "Cubic bezier path",
     "Action": "Robot code and a wait",
+    "Breakpoint": "Ends the auto here while on",
 }
 
 # One indent level inserted by Tab / newline in the action code box.
@@ -467,12 +470,33 @@ def _delete_entry(count: int, disabled: bool) -> tuple:
     return (label, ft.Icons.DELETE_OUTLINE, ("delete",), None, disabled, True)
 
 
+class _Submenu(tuple):
+    """Menu spec entry that reveals ``entries`` (same tuples as ``_ListMenu.sync``) on hover."""
+
+    def __new__(cls, label: str, icon, entries: list):
+        return super().__new__(cls, (label, icon, tuple(entries)))
+
+
+def _submenu_entry(entry, on_choose) -> ft.Control:
+    if entry is None:
+        return ft.Divider(height=1)
+    label, icon, data, _shortcut, disabled = entry[:5]
+    return ft.MenuItemButton(
+        content=ft.Text(label, size=13),
+        leading=ft.Icon(icon, size=20),
+        disabled=disabled,
+        style=ft.ButtonStyle(padding=ft.Padding.symmetric(horizontal=12)),
+        on_click=lambda e: on_choose(data),
+    )
+
+
 class _ListMenu:
     """Right-click menu around a list card.
 
     ``sync`` takes ``(label, icon, data, shortcut, disabled[, danger])`` tuples
-    (None for a divider) and only replaces the items when they change, so a rebuild while
-    the menu is open keeps the item ids the open menu reports.
+    (None for a divider, ``_Submenu`` for a hover submenu) and only replaces the items
+    when they change, so a rebuild while the menu is open keeps the item ids the open
+    menu reports.
     """
 
     def __init__(self, content: ft.Control, *, expand: bool, on_choose):
@@ -485,11 +509,38 @@ class _ListMenu:
         if spec == self._spec:
             return
         self._spec = spec
-        self.control.secondary_items = [
-            _menu_item(*entry) if entry is not None else ft.PopupMenuItem() for entry in spec
-        ]
+        self.control.secondary_items = [self._build_item(entry) for entry in spec]
         if _is_mounted(self.control):
             self.control.update()
+
+    def _build_item(self, entry) -> ft.PopupMenuItem:
+        if entry is None:
+            return ft.PopupMenuItem()
+        if not isinstance(entry, _Submenu):
+            return _menu_item(*entry)
+        label, icon, entries = entry
+        return ft.PopupMenuItem(
+            height=36,
+            padding=ft.Padding.all(0),
+            content=ft.SubmenuButton(
+                content=ft.Text(label, size=13),
+                leading=ft.Icon(icon, size=20),
+                trailing=ft.Icon(ft.Icons.CHEVRON_RIGHT, size=18),
+                expand=True,
+                style=ft.ButtonStyle(padding=ft.Padding.symmetric(horizontal=12)),
+                menu_style=ft.MenuStyle(alignment=ft.Alignment.TOP_RIGHT),
+                controls=[_submenu_entry(e, self._choose_nested) for e in entries],
+            ),
+        )
+
+    def _choose_nested(self, data) -> None:
+        # Submenu clicks don't close the outer popup; emptying its items does.
+        # Leave them empty here — the next ``sync`` (from the list rebuild) restores them.
+        self.control.secondary_items = []
+        self._spec = None
+        if _is_mounted(self.control):
+            self.control.update()
+        self._on_choose(data)
 
     def _select(self, e: ft.ContextMenuSelectEvent):
         items = self.control.secondary_items
@@ -1847,6 +1898,98 @@ class CodeAction(RobotAction):
         )
 
 
+class BreakpointAction(RobotAction):
+    """Ends the auto here while on (exported as ``return;``), to test part of a routine."""
+
+    type_name = "Breakpoint"
+    icon = ft.Icons.STOP_CIRCLE_OUTLINED
+
+    def __init__(self, enabled: bool = True, name: str = "Breakpoint"):
+        super().__init__(name)
+        self.enabled = enabled
+
+    def toggle(self):
+        self.enabled = not self.enabled
+        self._notify_change(commit=True)
+
+    def _fg(self) -> str:
+        if self.enabled:
+            return RED_LIGHT
+        return ft.Colors.with_opacity(0.45, ft.Colors.ON_SURFACE)
+
+    def _bgcolor(self) -> str:
+        # Soft fill inside a red outline — not a solid red card.
+        if self.enabled:
+            return ft.Colors.with_opacity(0.28 if self._hovering else 0.16, RED_LIGHT)
+        return ft.Colors.with_opacity(0.14 if self._hovering else 0.07, RED_LIGHT)
+
+    def _border(self):
+        if self.selected:
+            return ft.Border.all(2, ACCENT_BORDER)
+        if self.enabled:
+            return ft.Border.all(2, RED)
+        return ft.Border.all(1.5, ft.Colors.with_opacity(0.4, RED_LIGHT))
+
+    def _list_header_row(self, leading: ft.Control | None = None) -> ft.Row:
+        color = self._fg()
+        return ft.Row(
+            spacing=8,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            controls=[
+                ft.Icon(self.icon, size=18, color=color),
+                ft.Container(
+                    expand=True,
+                    content=title_text(self.name, size=TITLE_SIZE_LIST, color=color),
+                ),
+                _compact_icon_button(
+                    ft.Icons.TOGGLE_ON if self.enabled else ft.Icons.TOGGLE_OFF,
+                    color=color,
+                    tooltip="Turn off" if self.enabled else "Turn on",
+                    on_click=lambda e: self.toggle(),
+                ),
+            ],
+        )
+
+    def build_editor(self, previous_action) -> ft.Control:
+        def on_name_change(e):
+            self.name = (e.control.value or "").strip() or "Breakpoint"
+            self._notify_change(commit=False)
+
+        def on_name_commit(e):
+            self.name = (e.control.value or "").strip() or "Breakpoint"
+            e.control.value = self.name
+            if _is_mounted(e.control):
+                e.control.update()
+            self._notify_change(commit=True)
+
+        def on_switch(e):
+            self.enabled = bool(e.control.value)
+            self._notify_change(commit=True)
+
+        name_field = _text_field("Name", self.name, on_name_change, on_blur=on_name_commit)
+        name_field.on_submit = on_name_commit
+
+        return ft.Column(
+            spacing=10,
+            controls=[
+                _title_with_divider("Breakpoint", TITLE_SIZE_SECTION),
+                ft.Text(
+                    "While on, the auto ends here (exported as return;) and the simulation "
+                    "stops here too. Turn it off to run the whole routine.",
+                    size=11,
+                    color=ft.Colors.ON_SURFACE_VARIANT,
+                ),
+                name_field,
+                ft.Switch(
+                    label="Stop the auto here",
+                    value=self.enabled,
+                    active_color=RED_LIGHT,
+                    on_change=on_switch,
+                ),
+            ],
+        )
+
+
 class ActionList:
     def __init__(
         self,
@@ -2872,7 +3015,7 @@ class ActionList:
                     and self._selected_curve[0] is action else set(),
                 )
             else:
-                row = action.build_list_item(reorderable=isinstance(action, CodeAction))
+                row = action.build_list_item(reorderable=not isinstance(action, StartAction))
             if action.menu is not None:
                 action.menu.sync(self._menu_spec(action))
             if isinstance(action, StartAction):
@@ -2894,6 +3037,15 @@ class ActionList:
             if commit:
                 self.commit_history()
                 self._rebuild_list()
+            return
+        if isinstance(action, BreakpointAction):
+            # Name edits use commit=False so the editor field keeps focus.
+            self._rebuild_list()
+            if commit:
+                self._refresh_timeline(emit_pose=True)
+                self.commit_history()
+                if self.selected is action:
+                    self.refresh_editor()
             return
         if isinstance(action, MotionAction) and action.motion.g1_continuity:
             prev = self.previous_action(action)
@@ -2972,6 +3124,21 @@ class ActionList:
         self.select(action)
         self.commit_history()
 
+    def _insert_breakpoint(self, index: int, group: ActionGroup | None = None):
+        action = BreakpointAction()
+        action.group = group
+        self.actions.insert(index, action)
+        self.select(action)
+        self.commit_history()
+
+    def _insert_kind(self, kind: str, index: int, group: ActionGroup | None = None):
+        if kind == "Motion":
+            self._insert_motion(index, group)
+        elif kind == "Breakpoint":
+            self._insert_breakpoint(index, group)
+        else:
+            self._insert_code_action(index, group)
+
     def _insert_relative(self, anchor: RobotAction, where: str, kind: str):
         if anchor not in self.actions:
             return
@@ -2979,10 +3146,7 @@ class ActionList:
         # Start stays first.
         index = max(1, index)
         # Inserting beside a group member puts the new item in that group.
-        if kind == "Motion":
-            self._insert_motion(index, anchor.group)
-        else:
-            self._insert_code_action(index, anchor.group)
+        self._insert_kind(kind, index, anchor.group)
 
     def _add_curve(self, motion_action: MotionAction):
         previous = self.previous_action(motion_action)
@@ -3143,16 +3307,14 @@ class ActionList:
         def add_kind(kind: str):
             def handler(ev):
                 self._close_modal()
-                if kind == "Motion":
-                    self._add_motion()
-                else:
-                    self._add_code_action()
+                self._insert_kind(kind, len(self.actions))
 
             return handler
 
         icons = {
             "Motion": ft.Icons.ROUTE,
             "Action": ft.Icons.CODE,
+            "Breakpoint": BreakpointAction.icon,
         }
         tiles = [
             ft.Container(
@@ -3422,14 +3584,28 @@ class ActionList:
         )
         if target.group is not None:
             spec.append(("Ungroup", ft.Icons.FOLDER_OFF, ("ungroup",), None, False))
+        spec.append(None)
+        if isinstance(target, BreakpointAction):
+            spec.append(
+                (
+                    "Turn breakpoint off" if target.enabled else "Turn breakpoint on",
+                    ft.Icons.TOGGLE_OFF if target.enabled else ft.Icons.TOGGLE_ON,
+                    ("toggle_breakpoint",),
+                    None,
+                    False,
+                )
+            )
         # Nothing may precede Start.
         no_before = not target.deletable
+        icons = {"Motion": ft.Icons.ROUTE, "Action": ft.Icons.CODE, "Breakpoint": BreakpointAction.icon}
+        insert = [
+            (f"{kind} {where}", icons[kind], ("insert", where, kind), None, where == "before" and no_before)
+            for where in ("before", "after")
+            for kind in CREATABLE_ACTION_TYPES
+        ]
+        insert.insert(len(CREATABLE_ACTION_TYPES), None)
         return spec + [
-            None,
-            ("Insert motion before", ft.Icons.ROUTE, ("insert", "before", "Motion"), None, no_before),
-            ("Insert action before", ft.Icons.CODE, ("insert", "before", "Action"), None, no_before),
-            ("Insert motion after", ft.Icons.ROUTE, ("insert", "after", "Motion"), None, False),
-            ("Insert action after", ft.Icons.CODE, ("insert", "after", "Action"), None, False),
+            _Submenu("Insert action", ft.Icons.ADD, insert),
             None,
             _delete_entry(sum(1 for a in items if a.deletable), not copyable),
         ]
@@ -3438,6 +3614,9 @@ class ActionList:
         op = data[0]
         if op == "insert":
             self._insert_relative(target, data[1], data[2])
+            return
+        if op == "toggle_breakpoint":
+            target.toggle()
             return
         if not self._target_selected(target):
             if isinstance(target, tuple):

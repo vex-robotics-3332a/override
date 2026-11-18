@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "name": "neutral_near",
+  "path": "",
+  "actions": [
+    {
+      "type": "start",
+      "name": "Start",
+      "x": 9.04070464411164,
+      "y": 79.20127423844741,
+      "heading": 180.0,
+      "time": 0.0
+    },
+    {
+      "type": "action",
+      "name": "Action 1",
+      "code": "robot.lift.cascade_to_height(300.0);\nrobot.toggle.auto_toggle_loop(Duration::from_millis(700)).await;\n",
+      "time": 0.0
+    },
+    {
+      "type": "motion",
+      "id": 1,
+      "g1_continuity": true,
+      "start_speed": 0.0,
+      "end_speed": 0.0,
+      "curves": [
+        {
+          "points": [
+            [
+              9.04070464411164,
+              79.20127423844741
+            ],
+            [
+              21.797667334785782,
+              79.20127423844741
+            ],
+            [
+              27.018573303683187,
+              80.17592212391398
+            ],
+            [
+              34.94017960544122,
+              84.88881842195019
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": true
+        },
+        {
+          "points": [
+            [
+              34.94017960544122,
+              84.88881842195019
+            ],
+            [
+              37.63670818552403,
+              86.49309652900541
+            ],
+            [
+              38.897474082408806,
+              87.3362372450267
+            ],
+            [
+              41.38547187042752,
+              89.39280173216687
+            ]
+          ],
+          "max_speed": 15.0,
+          "reversed": true
+        }
+      ],
+      "code": "",
+      "timeout": null,
+      "group": {
+        "id": 1,
+        "name": "build stack",
+        "collapsed": false
+      }
+    },
+    {
+      "type": "action",
+      "name": "Action 2",
+      "code": "sleep(Duration::from_millis(400)).await;\nrobot.lift.matchload();\nsleep(Duration::from_millis(200)).await;\nrobot.lift.claw_close();\nsleep(Duration::from_millis(100)).await;",
+      "time": 700.0,
+      "group": {
+        "id": 1,
+        "name": "build stack",
+        "collapsed": false
+      }
+    }
+  ]
+}

@@ -151,7 +151,7 @@ def curve_boundaries(motion) -> list[float]:
 
 def build_routine_timeline(actions) -> Timeline:
     """Stitch start dwell, code-action waits, and motion profiles into one path."""
-    from actions import MotionAction, StartAction
+    from actions import BreakpointAction, MotionAction, StartAction
 
     samples: list[tuple[float, float, float, float]] = []
     spans: dict[str, tuple[float, float]] = {}
@@ -159,6 +159,11 @@ def build_routine_timeline(actions) -> Timeline:
     pose = (24.0, 24.0, 0.0)
 
     for action in actions:
+        if isinstance(action, BreakpointAction):
+            if action.enabled:
+                break
+            continue
+
         if isinstance(action, StartAction):
             pose = action.end_pose()
             t_offset = _hold(samples, t_offset, pose, action.time)

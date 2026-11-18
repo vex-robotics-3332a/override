@@ -70,6 +70,8 @@ def export_routine_macro(routine, code_root: str | None = None) -> Path:
                     macro.write("\t" + code)
                     if not code.endswith("\n"):
                         macro.write("\n")
+            if type == "breakpoint" and action.get("enabled", True):
+                macro.write("\treturn;\n")
             macro.write("\n")
         macro.write("}\n")
     return out_path

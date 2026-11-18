@@ -14,8 +14,8 @@
     {
       "type": "action",
       "name": "Action 1",
-      "code": "robot.lift.cascade_to_height(200.0);\nrobot.toggle.auto_toggle_loop(Duration::from_millis(700)).await;\n",
-      "time": 0.0,
+      "code": "robot.lift.cascade_to_height(300.0);\nrobot.toggle.auto_toggle_loop(Duration::from_millis(700)).await;\n",
+      "time": 700.0,
       "group": {
         "id": 1,
         "name": "Scoring first pin",
@@ -104,8 +104,8 @@
               61.7393522275766
             ],
             [
-              18.339138466076037,
-              64.26792412066025
+              18.405627965521486,
+              66.77086036000573
             ]
           ],
           "max_speed": 100.0,
@@ -130,20 +130,20 @@
         {
           "points": [
             [
-              18.339138466076037,
-              64.26792412066025
+              18.405627965521486,
+              66.77086036000573
             ],
             [
-              17.485164650321618,
-              61.42867604097081
+              17.526401920979925,
+              61.42173448975635
             ],
             [
               16.132066313197683,
               58.874684280962555
             ],
             [
-              15.434663064315362,
-              57.00431833711555
+              15.540140433535077,
+              56.85186505697585
             ]
           ],
           "max_speed": 100.0,
@@ -152,12 +152,12 @@
         {
           "points": [
             [
-              15.434663064315362,
-              57.00431833711555
+              15.540140433535077,
+              56.85186505697585
             ],
             [
-              15.04539926238603,
-              55.96035165146009
+              15.250779763464786,
+              55.86301772626362
             ],
             [
               14.181728567521983,
@@ -183,11 +183,27 @@
     {
       "type": "action",
       "name": "Action 4",
-      "code": "robot.chassis.drive_raw_v(-1.0, -6.0, Duration::from_millis(500)).await;\nrobot.lift.claw_close();\nsleep(Duration::from_millis(150)).await;\nrobot.chassis.distance_reset(&robot.dsrs.right, Wall::Bottom).await;\nrobot.chassis.cascade_to_height(400.0);",
+      "code": "robot.chassis.drive_raw_v(-1.0, -6.0, Duration::from_millis(750)).await;\nrobot.lift.claw_close();\nsleep(Duration::from_millis(150)).await;\nrobot.chassis.distance_reset(&robot.dsrs.right, Wall::Bottom).await;",
       "time": 500.0,
       "group": {
         "id": 2,
         "name": "Getting wall pin",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "breakpoint",
+      "name": "arc odih test",
+      "enabled": false
+    },
+    {
+      "type": "action",
+      "name": "Action 5",
+      "code": "robot.lift.cascade_to_height(400.0);",
+      "time": 0.0,
+      "group": {
+        "id": 3,
+        "name": "Scoring wall pin",
         "collapsed": true
       }
     },
@@ -269,9 +285,9 @@
     },
     {
       "type": "action",
-      "name": "Action 5",
-      "code": "robot.lift.matchload();\nsleep(Duration::from_millis(150));",
-      "time": 0.0,
+      "name": "Action 6",
+      "code": "robot.lift.slam_score().await;",
+      "time": 70.0,
       "group": {
         "id": 3,
         "name": "Scoring wall pin",
@@ -309,13 +325,23 @@
         }
       ],
       "code": "",
-      "timeout": null
+      "timeout": null,
+      "group": {
+        "id": 4,
+        "name": "Grabbing second pin",
+        "collapsed": true
+      }
     },
     {
       "type": "action",
-      "name": "Action 6",
+      "name": "Action 7",
       "code": "robot.chassis.distance_reset(&robot.dsrs.left, Wall::Left).await;",
-      "time": 0.0
+      "time": 0.0,
+      "group": {
+        "id": 4,
+        "name": "Grabbing second pin",
+        "collapsed": true
+      }
     },
     {
       "type": "motion",
@@ -348,7 +374,404 @@
         }
       ],
       "code": "robot.lift.auto_clamp_task(3000).await;\nsleep(Duration::from_millis(200)).await;\nrobot.chassis.end_motion();",
-      "timeout": null
+      "timeout": null,
+      "group": {
+        "id": 4,
+        "name": "Grabbing second pin",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "action",
+      "name": "Action 8",
+      "code": "robot.lift.cascade_to_height(700.0);",
+      "time": 0.0,
+      "group": {
+        "id": 5,
+        "name": "Scoring second pin",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "motion",
+      "id": 8,
+      "g1_continuity": true,
+      "start_speed": 0.0,
+      "end_speed": 20.0,
+      "curves": [
+        {
+          "points": [
+            [
+              40.994381092555045,
+              53.61687948151331
+            ],
+            [
+              49.6401562093583,
+              47.3883149663892
+            ],
+            [
+              43.712424471299094,
+              41.2732250755287
+            ],
+            [
+              33.06821857169315,
+              45.254255826270466
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": true
+        }
+      ],
+      "code": "robot.chassis.end_motion_when(|| robot.lift.at_alliance_goal(), true).await;",
+      "timeout": null,
+      "group": {
+        "id": 5,
+        "name": "Scoring second pin",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "action",
+      "name": "Action 9",
+      "code": "robot.lift.slam_score().await;",
+      "time": 70.0,
+      "group": {
+        "id": 5,
+        "name": "Scoring second pin",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "action",
+      "name": "Action 10",
+      "code": "robot.chassis.distance_reset(&robot.dsrs.right, Wall::Bottom).await;",
+      "time": 0.0,
+      "group": {
+        "id": 5,
+        "name": "Scoring second pin",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "motion",
+      "id": 9,
+      "g1_continuity": true,
+      "start_speed": 0.0,
+      "end_speed": 10.0,
+      "curves": [
+        {
+          "points": [
+            [
+              33.06821857169315,
+              45.254255826270466
+            ],
+            [
+              35.66174607345404,
+              44.28425272460303
+            ],
+            [
+              42.27461097623441,
+              42.06528913696002
+            ],
+            [
+              47.16921135152265,
+              47.38709728384764
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": false
+        }
+      ],
+      "code": "",
+      "timeout": null,
+      "group": {
+        "id": 6,
+        "name": "Grabbing third pin",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "motion",
+      "id": 10,
+      "g1_continuity": true,
+      "start_speed": 0.0,
+      "end_speed": 0.0,
+      "curves": [
+        {
+          "points": [
+            [
+              47.16921135152265,
+              47.38709728384764
+            ],
+            [
+              43.10752978278197,
+              42.97090629679192
+            ],
+            [
+              38.003845091609925,
+              37.76640416614813
+            ],
+            [
+              33.77031633649606,
+              33.77143716519025
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": true
+        },
+        {
+          "points": [
+            [
+              33.77031633649606,
+              33.77143716519025
+            ],
+            [
+              32.971643994754366,
+              33.01777046433658
+            ],
+            [
+              32.41886831499606,
+              32.45036109877766
+            ],
+            [
+              31.425477076325365,
+              31.4083482588985
+            ]
+          ],
+          "max_speed": 60.0,
+          "reversed": true
+        }
+      ],
+      "code": "robot.lift.auto_clamp_task(3000).await;\nsleep(Duration::from_millis(200)).await;\nrobot.chassis.end_motion();",
+      "timeout": null,
+      "group": {
+        "id": 6,
+        "name": "Grabbing third pin",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "action",
+      "name": "Action 11",
+      "code": "robot.lift.cascade_to_height(1000.0);",
+      "time": 0.0,
+      "group": {
+        "id": 7,
+        "name": "Scoring third pin",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "motion",
+      "id": 11,
+      "g1_continuity": true,
+      "start_speed": 10.0,
+      "end_speed": 20.0,
+      "curves": [
+        {
+          "points": [
+            [
+              31.425477076325365,
+              31.4083482588985
+            ],
+            [
+              27.285365390665696,
+              27.065598527419112
+            ],
+            [
+              20.513666973043552,
+              27.22088344136914
+            ],
+            [
+              23.209650229401873,
+              39.6356165548753
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": true
+        }
+      ],
+      "code": "robot.chassis.end_motion_when(|| robot.lift.at_alliance_goal(), true).await;",
+      "timeout": null,
+      "group": {
+        "id": 7,
+        "name": "Scoring third pin",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "action",
+      "name": "Action 12",
+      "code": "robot.lift.slam_score().await;",
+      "time": 70.0,
+      "group": {
+        "id": 7,
+        "name": "Scoring third pin",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "action",
+      "name": "Action 13",
+      "code": "robot.lift.matchload();",
+      "time": 0.0,
+      "group": {
+        "id": 8,
+        "name": "Matchload leftq 1",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "motion",
+      "id": 12,
+      "g1_continuity": true,
+      "start_speed": 20.0,
+      "end_speed": 20.0,
+      "curves": [
+        {
+          "points": [
+            [
+              23.209650229401873,
+              39.6356165548753
+            ],
+            [
+              21.93636749350802,
+              33.77227697111634
+            ],
+            [
+              23.052907799166263,
+              15.614814670173558
+            ],
+            [
+              27.026098547192763,
+              12.06519756136396
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": false
+        }
+      ],
+      "code": "",
+      "timeout": null,
+      "group": {
+        "id": 8,
+        "name": "Matchload leftq 1",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "motion",
+      "id": 13,
+      "g1_continuity": true,
+      "start_speed": 20.0,
+      "end_speed": 5.0,
+      "curves": [
+        {
+          "points": [
+            [
+              27.026098547192763,
+              12.06519756136396
+            ],
+            [
+              24.045258422892285,
+              14.728256491796296
+            ],
+            [
+              19.38712889666964,
+              13.395784596819169
+            ],
+            [
+              12.333429040758913,
+              13.38584624136169
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": true
+        }
+      ],
+      "code": "robot.lift.auto_clamp_task(2000).await;\nsleep(Duration::from_millis(100)).await;\nrobot.chassis.end_motion();",
+      "timeout": null,
+      "group": {
+        "id": 8,
+        "name": "Matchload leftq 1",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "motion",
+      "id": 14,
+      "g1_continuity": true,
+      "start_speed": 10.0,
+      "end_speed": 20.0,
+      "curves": [
+        {
+          "points": [
+            [
+              12.333429040758913,
+              13.38584624136169
+            ],
+            [
+              15.390800047762944,
+              13.390153943766624
+            ],
+            [
+              20.591979961401833,
+              13.185742370565094
+            ],
+            [
+              22.211711555332986,
+              10.712562402740673
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": false
+        }
+      ],
+      "code": "",
+      "timeout": null,
+      "group": {
+        "id": 8,
+        "name": "Matchload leftq 1",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "motion",
+      "id": 15,
+      "g1_continuity": true,
+      "start_speed": 20.0,
+      "end_speed": 10.0,
+      "curves": [
+        {
+          "points": [
+            [
+              22.211711555332986,
+              10.712562402740673
+            ],
+            [
+              19.800973771040763,
+              14.393535483792014
+            ],
+            [
+              21.95686725008512,
+              30.960782600744977
+            ],
+            [
+              23.227938228594745,
+              39.51171920004394
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": true
+        }
+      ],
+      "code": "robot.chassis.end_motion_when(|| robot.lift.at_alliance_goal(), true).await;",
+      "timeout": null,
+      "group": {
+        "id": 8,
+        "name": "Matchload leftq 1",
+        "collapsed": true
+      }
     }
   ]
 }

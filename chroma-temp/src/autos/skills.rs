@@ -96,4 +96,24 @@ robot.chassis.distance_reset(&robot.dsrs.right, Wall::Bottom).await;
 
 	robot.lift.slam_score().await;
 
+	robot.lift.matchload();
+
+	let mut motion12 = MotionProfile::new("skills/motion12.json");
+	robot.chassis.drive_along(&mut motion12).await;
+
+	let mut motion13 = MotionProfile::new("skills/motion13.json");
+	join(robot.chassis.drive_along(&mut motion13), async {
+		robot.lift.auto_clamp_task(2000).await;
+		sleep(Duration::from_millis(100)).await;
+		robot.chassis.end_motion();
+	}).await;
+
+	let mut motion14 = MotionProfile::new("skills/motion14.json");
+	robot.chassis.drive_along(&mut motion14).await;
+
+	let mut motion15 = MotionProfile::new("skills/motion15.json");
+	join(robot.chassis.drive_along(&mut motion15), async {
+		robot.chassis.end_motion_when(|| robot.lift.at_alliance_goal(), true).await;
+	}).await;
+
 }
