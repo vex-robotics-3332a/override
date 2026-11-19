@@ -19,7 +19,7 @@
       "group": {
         "id": 1,
         "name": "Scoring first pin",
-        "collapsed": true
+        "collapsed": false
       }
     },
     {
@@ -58,7 +58,7 @@
       "group": {
         "id": 1,
         "name": "Scoring first pin",
-        "collapsed": true
+        "collapsed": false
       }
     },
     {
@@ -69,7 +69,7 @@
       "group": {
         "id": 1,
         "name": "Scoring first pin",
-        "collapsed": true
+        "collapsed": false
       }
     },
     {
@@ -713,7 +713,7 @@
     {
       "type": "action",
       "name": "Action 14",
-      "code": "robot.chassis.drive_raw_v(-12.0, -12.0, Duration::from_millis(250));\nrobot.chassis.distance_reset(&robot.dsrs.right, Wall::Bottom).await;\nrobot.chassis.distance_reset(&robot.dsrs.back, Wall::Left).await;\n",
+      "code": "robot.chassis.drive_raw_v(-12.0, -12.0, Duration::from_millis(250)).await;\nrobot.chassis.distance_reset(&robot.dsrs.right, Wall::Bottom).await;\nrobot.chassis.distance_reset(&robot.dsrs.back, Wall::Left).await;\n",
       "time": 0.0,
       "group": {
         "id": 8,
@@ -818,7 +818,7 @@
       "group": {
         "id": 9,
         "name": "Matchload leftq 2",
-        "collapsed": false
+        "collapsed": true
       }
     },
     {
@@ -857,7 +857,7 @@
       "group": {
         "id": 9,
         "name": "Matchload leftq 2",
-        "collapsed": false
+        "collapsed": true
       }
     },
     {
@@ -896,7 +896,7 @@
       "group": {
         "id": 9,
         "name": "Matchload leftq 2",
-        "collapsed": false
+        "collapsed": true
       }
     },
     {
@@ -907,7 +907,7 @@
       "group": {
         "id": 9,
         "name": "Matchload leftq 2",
-        "collapsed": false
+        "collapsed": true
       }
     },
     {
@@ -946,7 +946,7 @@
       "group": {
         "id": 9,
         "name": "Matchload leftq 2",
-        "collapsed": false
+        "collapsed": true
       }
     },
     {
@@ -985,7 +985,7 @@
       "group": {
         "id": 9,
         "name": "Matchload leftq 2",
-        "collapsed": false
+        "collapsed": true
       }
     },
     {
@@ -996,7 +996,1589 @@
       "group": {
         "id": 9,
         "name": "Matchload leftq 2",
-        "collapsed": false
+        "collapsed": true
+      }
+    },
+    {
+      "type": "breakpoint",
+      "name": "first part of skills",
+      "enabled": false
+    },
+    {
+      "type": "action",
+      "name": "Action 19",
+      "code": "robot.lift.cascade_to_height(0.0);\nrobot.lift.claw_open();",
+      "time": 0.0,
+      "group": {
+        "id": 10,
+        "name": "Matchload bottomq 1",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "motion",
+      "id": 20,
+      "g1_continuity": true,
+      "snap_to_previous": true,
+      "start_speed": 20.0,
+      "end_speed": 20.0,
+      "curves": [
+        {
+          "points": [
+            [
+              23.227938228594745,
+              39.51171920004394
+            ],
+            [
+              22.362956324284525,
+              33.692685056120595
+            ],
+            [
+              23.052907799166263,
+              15.614814670173558
+            ],
+            [
+              26.158247947836383,
+              12.82490574292683
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": false
+        }
+      ],
+      "code": "",
+      "timeout": null,
+      "group": {
+        "id": 10,
+        "name": "Matchload bottomq 1",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "motion",
+      "id": 21,
+      "g1_continuity": true,
+      "snap_to_previous": true,
+      "start_speed": 20.0,
+      "end_speed": 5.0,
+      "curves": [
+        {
+          "points": [
+            [
+              26.158247947836383,
+              12.82490574292683
+            ],
+            [
+              24.042774661626495,
+              14.725495541141527
+            ],
+            [
+              19.38712889666964,
+              13.395784596819169
+            ],
+            [
+              12.333429040758913,
+              13.38584624136169
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": true
+        }
+      ],
+      "code": "robot.lift.auto_clamp_task(2000).await;\nrobot.chassis.end_motion();",
+      "timeout": null,
+      "group": {
+        "id": 10,
+        "name": "Matchload bottomq 1",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "action",
+      "name": "Action 20",
+      "code": "robot.chassis.drive_raw_v(-12.0, -12.0, Duration::from_millis(250)).await;\nrobot.chassis.distance_reset(&robot.dsrs.right, Wall::Bottom).await;\nrobot.chassis.distance_reset(&robot.dsrs.back, Wall::Left).await;\n",
+      "time": 0.0,
+      "group": {
+        "id": 10,
+        "name": "Matchload bottomq 1",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "motion",
+      "id": 22,
+      "g1_continuity": true,
+      "snap_to_previous": true,
+      "start_speed": 10.0,
+      "end_speed": 20.0,
+      "curves": [
+        {
+          "points": [
+            [
+              12.333429040758913,
+              13.38584624136169
+            ],
+            [
+              15.390800047762944,
+              13.390153943766624
+            ],
+            [
+              22.668297092005343,
+              13.802023357328267
+            ],
+            [
+              24.12145864310287,
+              11.268305781055659
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": false
+        }
+      ],
+      "code": "sleep(Duration::from_millis(100)).await;\nrobot.lift.score_height(0, \"alliance\");",
+      "timeout": null,
+      "group": {
+        "id": 10,
+        "name": "Matchload bottomq 1",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "motion",
+      "id": 23,
+      "g1_continuity": true,
+      "snap_to_previous": true,
+      "start_speed": 20.0,
+      "end_speed": 10.0,
+      "curves": [
+        {
+          "points": [
+            [
+              24.12145864310287,
+              11.268305781055659
+            ],
+            [
+              21.46856418957772,
+              15.893865341048222
+            ],
+            [
+              35.77125053230079,
+              20.58912538337448
+            ],
+            [
+              39.75984625141033,
+              21.8981529117048
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": true
+        }
+      ],
+      "code": "robot.chassis.end_motion_when(|| robot.lift.at_alliance_goal(), true).await;",
+      "timeout": null,
+      "group": {
+        "id": 10,
+        "name": "Matchload bottomq 1",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "action",
+      "name": "Action 21",
+      "code": "robot.chassis.distance_reset(&robot.dsrs.front, Wall::Bottom).await;\nrobot.chassis.distance_reset(&robot.dsrs.right, Wall::Left).await;\nrobot.lift.drop();\nrobot.chassis.drive_raw_v(-4.0, -4.0, Duration::from_millis(200)).await;\nrobot.lift.matchload();\nrobot.chassis.goal_reset((48.5, 24.8));\n\n",
+      "time": 0.0,
+      "group": {
+        "id": 10,
+        "name": "Matchload bottomq 1",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "action",
+      "name": "Action 22",
+      "code": "robot.lift.matchload();",
+      "time": 0.0,
+      "group": {
+        "id": 11,
+        "name": "Matchload bottomq 2",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "motion",
+      "id": 24,
+      "g1_continuity": true,
+      "snap_to_previous": true,
+      "start_speed": 20.0,
+      "end_speed": 20.0,
+      "curves": [
+        {
+          "points": [
+            [
+              39.75984625141033,
+              21.8981529117048
+            ],
+            [
+              31.54280424457744,
+              19.201380677593235
+            ],
+            [
+              23.052907799166263,
+              15.614814670173558
+            ],
+            [
+              26.158247947836383,
+              12.82490574292683
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": false
+        }
+      ],
+      "code": "",
+      "timeout": null,
+      "group": {
+        "id": 11,
+        "name": "Matchload bottomq 2",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "motion",
+      "id": 25,
+      "g1_continuity": true,
+      "snap_to_previous": true,
+      "start_speed": 20.0,
+      "end_speed": 5.0,
+      "curves": [
+        {
+          "points": [
+            [
+              26.158247947836383,
+              12.82490574292683
+            ],
+            [
+              24.042774661626495,
+              14.725495541141527
+            ],
+            [
+              19.38712889666964,
+              13.395784596819169
+            ],
+            [
+              12.333429040758913,
+              13.38584624136169
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": true
+        }
+      ],
+      "code": "robot.lift.auto_clamp_task(2000).await;\nrobot.chassis.end_motion();",
+      "timeout": null,
+      "group": {
+        "id": 11,
+        "name": "Matchload bottomq 2",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "action",
+      "name": "Action 23",
+      "code": "robot.chassis.drive_raw_v(-12.0, -12.0, Duration::from_millis(250)).await;\nrobot.chassis.distance_reset(&robot.dsrs.right, Wall::Bottom).await;\nrobot.chassis.distance_reset(&robot.dsrs.back, Wall::Left).await;\n",
+      "time": 0.0,
+      "group": {
+        "id": 11,
+        "name": "Matchload bottomq 2",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "motion",
+      "id": 26,
+      "g1_continuity": true,
+      "snap_to_previous": true,
+      "start_speed": 10.0,
+      "end_speed": 20.0,
+      "curves": [
+        {
+          "points": [
+            [
+              12.333429040758913,
+              13.38584624136169
+            ],
+            [
+              15.390800047762944,
+              13.390153943766624
+            ],
+            [
+              22.668297092005343,
+              13.802023357328267
+            ],
+            [
+              24.12145864310287,
+              11.268305781055659
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": false
+        }
+      ],
+      "code": "sleep(Duration::from_millis(100)).await;\nrobot.lift.score_height(1, \"alliance\");",
+      "timeout": null,
+      "group": {
+        "id": 11,
+        "name": "Matchload bottomq 2",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "motion",
+      "id": 27,
+      "g1_continuity": true,
+      "snap_to_previous": true,
+      "start_speed": 20.0,
+      "end_speed": 10.0,
+      "curves": [
+        {
+          "points": [
+            [
+              24.12145864310287,
+              11.268305781055659
+            ],
+            [
+              21.46856418957772,
+              15.893865341048222
+            ],
+            [
+              35.77125053230079,
+              20.58912538337448
+            ],
+            [
+              39.75984625141033,
+              21.8981529117048
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": true
+        }
+      ],
+      "code": "robot.chassis.end_motion_when(|| robot.lift.at_alliance_goal(), true).await;",
+      "timeout": null,
+      "group": {
+        "id": 11,
+        "name": "Matchload bottomq 2",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "action",
+      "name": "Action 24",
+      "code": "robot.chassis.distance_reset(&robot.dsrs.front, Wall::Bottom).await;\nrobot.chassis.distance_reset(&robot.dsrs.right, Wall::Left).await;\nrobot.lift.drop();\nrobot.chassis.drive_raw_v(-4.0, -4.0, Duration::from_millis(200)).await;\nrobot.lift.matchload();\nrobot.chassis.goal_reset((48.5, 24.8));\n\n",
+      "time": 0.0,
+      "group": {
+        "id": 11,
+        "name": "Matchload bottomq 2",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "action",
+      "name": "Action 25",
+      "code": "robot.lift.matchload();",
+      "time": 0.0,
+      "group": {
+        "id": 12,
+        "name": "Matchload bottomq 3",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "motion",
+      "id": 28,
+      "g1_continuity": true,
+      "snap_to_previous": true,
+      "start_speed": 20.0,
+      "end_speed": 20.0,
+      "curves": [
+        {
+          "points": [
+            [
+              39.75984625141033,
+              21.8981529117048
+            ],
+            [
+              31.54280424457744,
+              19.201380677593235
+            ],
+            [
+              23.052907799166263,
+              15.614814670173558
+            ],
+            [
+              26.158247947836383,
+              12.82490574292683
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": false
+        }
+      ],
+      "code": "",
+      "timeout": null,
+      "group": {
+        "id": 12,
+        "name": "Matchload bottomq 3",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "motion",
+      "id": 29,
+      "g1_continuity": true,
+      "snap_to_previous": true,
+      "start_speed": 20.0,
+      "end_speed": 5.0,
+      "curves": [
+        {
+          "points": [
+            [
+              26.158247947836383,
+              12.82490574292683
+            ],
+            [
+              24.042774661626495,
+              14.725495541141527
+            ],
+            [
+              19.38712889666964,
+              13.395784596819169
+            ],
+            [
+              12.333429040758913,
+              13.38584624136169
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": true
+        }
+      ],
+      "code": "robot.lift.auto_clamp_task(2000).await;\nrobot.chassis.end_motion();",
+      "timeout": null,
+      "group": {
+        "id": 12,
+        "name": "Matchload bottomq 3",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "action",
+      "name": "Action 26",
+      "code": "robot.chassis.drive_raw_v(-12.0, -12.0, Duration::from_millis(250)).await;\nrobot.chassis.distance_reset(&robot.dsrs.right, Wall::Bottom).await;\nrobot.chassis.distance_reset(&robot.dsrs.back, Wall::Left).await;\n",
+      "time": 0.0,
+      "group": {
+        "id": 12,
+        "name": "Matchload bottomq 3",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "motion",
+      "id": 30,
+      "g1_continuity": true,
+      "snap_to_previous": true,
+      "start_speed": 10.0,
+      "end_speed": 20.0,
+      "curves": [
+        {
+          "points": [
+            [
+              12.333429040758913,
+              13.38584624136169
+            ],
+            [
+              15.390800047762944,
+              13.390153943766624
+            ],
+            [
+              22.668297092005343,
+              13.802023357328267
+            ],
+            [
+              24.12145864310287,
+              11.268305781055659
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": false
+        }
+      ],
+      "code": "sleep(Duration::from_millis(100)).await;\nrobot.lift.score_height(2, \"alliance\");",
+      "timeout": null,
+      "group": {
+        "id": 12,
+        "name": "Matchload bottomq 3",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "motion",
+      "id": 31,
+      "g1_continuity": true,
+      "snap_to_previous": true,
+      "start_speed": 20.0,
+      "end_speed": 10.0,
+      "curves": [
+        {
+          "points": [
+            [
+              24.12145864310287,
+              11.268305781055659
+            ],
+            [
+              21.46856418957772,
+              15.893865341048222
+            ],
+            [
+              35.77125053230079,
+              20.58912538337448
+            ],
+            [
+              39.75984625141033,
+              21.8981529117048
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": true
+        }
+      ],
+      "code": "robot.chassis.end_motion_when(|| robot.lift.at_alliance_goal(), true).await;",
+      "timeout": null,
+      "group": {
+        "id": 12,
+        "name": "Matchload bottomq 3",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "action",
+      "name": "Action 27",
+      "code": "robot.chassis.distance_reset(&robot.dsrs.front, Wall::Bottom).await;\nrobot.chassis.distance_reset(&robot.dsrs.right, Wall::Left).await;\nrobot.lift.drop();\nrobot.chassis.drive_raw_v(-4.0, -4.0, Duration::from_millis(200)).await;\nrobot.lift.matchload();\nrobot.chassis.goal_reset((48.5, 24.8));\n\n",
+      "time": 0.0,
+      "group": {
+        "id": 12,
+        "name": "Matchload bottomq 3",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "action",
+      "name": "Action 28",
+      "code": "robot.lift.matchload();",
+      "time": 0.0,
+      "group": {
+        "id": 13,
+        "name": "Matchload bottomq 4",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "motion",
+      "id": 32,
+      "g1_continuity": true,
+      "snap_to_previous": true,
+      "start_speed": 20.0,
+      "end_speed": 20.0,
+      "curves": [
+        {
+          "points": [
+            [
+              39.75984625141033,
+              21.8981529117048
+            ],
+            [
+              31.54280424457744,
+              19.201380677593235
+            ],
+            [
+              23.052907799166263,
+              15.614814670173558
+            ],
+            [
+              26.158247947836383,
+              12.82490574292683
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": false
+        }
+      ],
+      "code": "",
+      "timeout": null,
+      "group": {
+        "id": 13,
+        "name": "Matchload bottomq 4",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "motion",
+      "id": 33,
+      "g1_continuity": true,
+      "snap_to_previous": true,
+      "start_speed": 20.0,
+      "end_speed": 5.0,
+      "curves": [
+        {
+          "points": [
+            [
+              26.158247947836383,
+              12.82490574292683
+            ],
+            [
+              24.042774661626495,
+              14.725495541141527
+            ],
+            [
+              19.38712889666964,
+              13.395784596819169
+            ],
+            [
+              12.333429040758913,
+              13.38584624136169
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": true
+        }
+      ],
+      "code": "robot.lift.auto_clamp_task(2000).await;\nrobot.chassis.end_motion();",
+      "timeout": null,
+      "group": {
+        "id": 13,
+        "name": "Matchload bottomq 4",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "action",
+      "name": "Action 29",
+      "code": "robot.chassis.drive_raw_v(-12.0, -12.0, Duration::from_millis(250)).await;\nrobot.chassis.distance_reset(&robot.dsrs.right, Wall::Bottom).await;\nrobot.chassis.distance_reset(&robot.dsrs.back, Wall::Left).await;\n",
+      "time": 0.0,
+      "group": {
+        "id": 13,
+        "name": "Matchload bottomq 4",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "motion",
+      "id": 34,
+      "g1_continuity": true,
+      "snap_to_previous": true,
+      "start_speed": 10.0,
+      "end_speed": 20.0,
+      "curves": [
+        {
+          "points": [
+            [
+              12.333429040758913,
+              13.38584624136169
+            ],
+            [
+              15.390800047762944,
+              13.390153943766624
+            ],
+            [
+              22.668297092005343,
+              13.802023357328267
+            ],
+            [
+              24.12145864310287,
+              11.268305781055659
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": false
+        }
+      ],
+      "code": "sleep(Duration::from_millis(100)).await;\nrobot.lift.score_height(3, \"alliance\");",
+      "timeout": null,
+      "group": {
+        "id": 13,
+        "name": "Matchload bottomq 4",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "motion",
+      "id": 35,
+      "g1_continuity": true,
+      "snap_to_previous": true,
+      "start_speed": 20.0,
+      "end_speed": 10.0,
+      "curves": [
+        {
+          "points": [
+            [
+              24.12145864310287,
+              11.268305781055659
+            ],
+            [
+              21.46856418957772,
+              15.893865341048222
+            ],
+            [
+              35.77125053230079,
+              20.58912538337448
+            ],
+            [
+              39.75984625141033,
+              21.8981529117048
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": true
+        }
+      ],
+      "code": "robot.chassis.end_motion_when(|| robot.lift.at_alliance_goal(), true).await;",
+      "timeout": null,
+      "group": {
+        "id": 13,
+        "name": "Matchload bottomq 4",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "action",
+      "name": "Action 30",
+      "code": "robot.chassis.distance_reset(&robot.dsrs.front, Wall::Bottom).await;\nrobot.chassis.distance_reset(&robot.dsrs.right, Wall::Left).await;\nrobot.lift.drop();\nrobot.chassis.drive_raw_v(-4.0, -4.0, Duration::from_millis(200)).await;\nrobot.lift.matchload();\nrobot.chassis.goal_reset((48.5, 24.8));\n\n",
+      "time": 0.0,
+      "group": {
+        "id": 13,
+        "name": "Matchload bottomq 4",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "action",
+      "name": "Action 31",
+      "code": "robot.lift.matchload();",
+      "time": 0.0,
+      "group": {
+        "id": 14,
+        "name": "Matchload bottomq 5",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "motion",
+      "id": 36,
+      "g1_continuity": true,
+      "snap_to_previous": true,
+      "start_speed": 20.0,
+      "end_speed": 20.0,
+      "curves": [
+        {
+          "points": [
+            [
+              39.75984625141033,
+              21.8981529117048
+            ],
+            [
+              31.54280424457744,
+              19.201380677593235
+            ],
+            [
+              23.052907799166263,
+              15.614814670173558
+            ],
+            [
+              26.158247947836383,
+              12.82490574292683
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": false
+        }
+      ],
+      "code": "",
+      "timeout": null,
+      "group": {
+        "id": 14,
+        "name": "Matchload bottomq 5",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "motion",
+      "id": 37,
+      "g1_continuity": true,
+      "snap_to_previous": true,
+      "start_speed": 20.0,
+      "end_speed": 5.0,
+      "curves": [
+        {
+          "points": [
+            [
+              26.158247947836383,
+              12.82490574292683
+            ],
+            [
+              24.042774661626495,
+              14.725495541141527
+            ],
+            [
+              19.38712889666964,
+              13.395784596819169
+            ],
+            [
+              12.333429040758913,
+              13.38584624136169
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": true
+        }
+      ],
+      "code": "robot.lift.auto_clamp_task(2000).await;\nrobot.chassis.end_motion();",
+      "timeout": null,
+      "group": {
+        "id": 14,
+        "name": "Matchload bottomq 5",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "action",
+      "name": "Action 32",
+      "code": "robot.chassis.drive_raw_v(-12.0, -12.0, Duration::from_millis(250)).await;\nrobot.chassis.distance_reset(&robot.dsrs.right, Wall::Bottom).await;\nrobot.chassis.distance_reset(&robot.dsrs.back, Wall::Left).await;\n",
+      "time": 0.0,
+      "group": {
+        "id": 14,
+        "name": "Matchload bottomq 5",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "motion",
+      "id": 38,
+      "g1_continuity": true,
+      "snap_to_previous": true,
+      "start_speed": 10.0,
+      "end_speed": 20.0,
+      "curves": [
+        {
+          "points": [
+            [
+              12.333429040758913,
+              13.38584624136169
+            ],
+            [
+              15.390800047762944,
+              13.390153943766624
+            ],
+            [
+              22.668297092005343,
+              13.802023357328267
+            ],
+            [
+              24.12145864310287,
+              11.268305781055659
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": false
+        }
+      ],
+      "code": "sleep(Duration::from_millis(100)).await;\nrobot.lift.score_height(4, \"alliance\");",
+      "timeout": null,
+      "group": {
+        "id": 14,
+        "name": "Matchload bottomq 5",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "motion",
+      "id": 39,
+      "g1_continuity": true,
+      "snap_to_previous": true,
+      "start_speed": 20.0,
+      "end_speed": 10.0,
+      "curves": [
+        {
+          "points": [
+            [
+              24.12145864310287,
+              11.268305781055659
+            ],
+            [
+              21.46856418957772,
+              15.893865341048222
+            ],
+            [
+              35.77125053230079,
+              20.58912538337448
+            ],
+            [
+              39.75984625141033,
+              21.8981529117048
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": true
+        }
+      ],
+      "code": "robot.chassis.end_motion_when(|| robot.lift.at_alliance_goal(), true).await;",
+      "timeout": null,
+      "group": {
+        "id": 14,
+        "name": "Matchload bottomq 5",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "action",
+      "name": "Action 33",
+      "code": "robot.chassis.distance_reset(&robot.dsrs.front, Wall::Bottom).await;\nrobot.chassis.distance_reset(&robot.dsrs.right, Wall::Left).await;\nrobot.lift.drop();\nrobot.chassis.drive_raw_v(-4.0, -4.0, Duration::from_millis(200)).await;\nrobot.lift.matchload();\nrobot.chassis.goal_reset((48.5, 24.8));\n\n",
+      "time": 0.0,
+      "group": {
+        "id": 14,
+        "name": "Matchload bottomq 5",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "breakpoint",
+      "name": "second part of skills",
+      "enabled": false
+    },
+    {
+      "type": "action",
+      "name": "Action 34",
+      "code": "robot.lift.matchload();",
+      "time": 0.0,
+      "group": {
+        "id": 15,
+        "name": "Matchload mid goal",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "motion",
+      "id": 40,
+      "g1_continuity": true,
+      "snap_to_previous": true,
+      "start_speed": 20.0,
+      "end_speed": 20.0,
+      "curves": [
+        {
+          "points": [
+            [
+              39.75984625141033,
+              21.8981529117048
+            ],
+            [
+              31.54280424457744,
+              19.201380677593235
+            ],
+            [
+              23.052907799166263,
+              15.614814670173558
+            ],
+            [
+              26.158247947836383,
+              12.82490574292683
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": false
+        }
+      ],
+      "code": "",
+      "timeout": null,
+      "group": {
+        "id": 15,
+        "name": "Matchload mid goal",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "motion",
+      "id": 41,
+      "g1_continuity": true,
+      "snap_to_previous": true,
+      "start_speed": 20.0,
+      "end_speed": 5.0,
+      "curves": [
+        {
+          "points": [
+            [
+              26.158247947836383,
+              12.82490574292683
+            ],
+            [
+              24.042774661626495,
+              14.725495541141527
+            ],
+            [
+              19.38712889666964,
+              13.395784596819169
+            ],
+            [
+              12.333429040758913,
+              13.38584624136169
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": true
+        }
+      ],
+      "code": "robot.lift.auto_clamp_task(2000).await;\nrobot.chassis.end_motion();",
+      "timeout": null,
+      "group": {
+        "id": 15,
+        "name": "Matchload mid goal",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "action",
+      "name": "Action 35",
+      "code": "robot.chassis.drive_raw_v(-12.0, -12.0, Duration::from_millis(250)).await;\nrobot.chassis.distance_reset(&robot.dsrs.right, Wall::Bottom).await;\nrobot.chassis.distance_reset(&robot.dsrs.back, Wall::Left).await;\n",
+      "time": 0.0,
+      "group": {
+        "id": 15,
+        "name": "Matchload mid goal",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "motion",
+      "id": 42,
+      "g1_continuity": true,
+      "snap_to_previous": true,
+      "start_speed": 0.0,
+      "end_speed": 0.0,
+      "curves": [
+        {
+          "points": [
+            [
+              12.333429040758913,
+              13.38584624136169
+            ],
+            [
+              27.37637172561344,
+              13.40704109152295
+            ],
+            [
+              33.915427982835666,
+              30.989903667469356
+            ],
+            [
+              43.09086315934821,
+              37.80334563022619
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": false
+        },
+        {
+          "points": [
+            [
+              43.09086315934821,
+              37.80334563022619
+            ],
+            [
+              50.40568676731924,
+              43.23514533911556
+            ],
+            [
+              58.977318120906745,
+              39.10122425973547
+            ],
+            [
+              64.03187611120414,
+              33.365547776929546
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": false
+        },
+        {
+          "points": [
+            [
+              64.03187611120414,
+              33.365547776929546
+            ],
+            [
+              67.08629629056668,
+              29.899534324317685
+            ],
+            [
+              69.56481462341809,
+              24.4277240264301
+            ],
+            [
+              69.65261607762329,
+              8.784400176566663
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": false
+        }
+      ],
+      "code": "",
+      "timeout": null,
+      "group": {
+        "id": 16,
+        "name": "2nd toggle",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "action",
+      "name": "Action 36",
+      "code": "robot.lift.score_height(0, \"midfield\");\nrobot.chassis.drive_raw_v(10.0, 10.0, Duration::from_millis(150)).await;\nrobot.toggle.auto_toggle_loop(Duration::from_millis(700)).await;\nrobot.chassis.distance_reset(&robot.dsrs.front, Wall::Bottom).await;\n",
+      "time": 700.0,
+      "group": {
+        "id": 16,
+        "name": "2nd toggle",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "motion",
+      "id": 43,
+      "g1_continuity": true,
+      "snap_to_previous": true,
+      "start_speed": 0.0,
+      "end_speed": 0.0,
+      "curves": [
+        {
+          "points": [
+            [
+              69.65261607762329,
+              8.784400176566663
+            ],
+            [
+              69.6189403426848,
+              14.784305671228754
+            ],
+            [
+              71.88746136878511,
+              25.342874991788264
+            ],
+            [
+              85.09384608905759,
+              57.7078178273856
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": true
+        },
+        {
+          "points": [
+            [
+              85.09384608905759,
+              57.7078178273856
+            ],
+            [
+              87.36066953754057,
+              63.26313163071009
+            ],
+            [
+              86.8807097055342,
+              65.45007885638316
+            ],
+            [
+              80.25770520557752,
+              68.31012668732265
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": true
+        }
+      ],
+      "code": "robot.chassis.end_motion_when(|| robot.lift.at_alliance_goal(), true).await;",
+      "timeout": null,
+      "group": {
+        "id": 17,
+        "name": "Score first midfield pin",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "action",
+      "name": "Action 37",
+      "code": "robot.lift.drop();\nrobot.chassis.drive_raw_v(-5.0, -5.0, Duration::from_millis(300)).await;\nrobot.chassis.goal_reset((72.0, 72.0));",
+      "time": 0.0,
+      "group": {
+        "id": 17,
+        "name": "Score first midfield pin",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "motion",
+      "id": 44,
+      "g1_continuity": true,
+      "snap_to_previous": true,
+      "start_speed": 20.0,
+      "end_speed": 20.0,
+      "curves": [
+        {
+          "points": [
+            [
+              80.25770520557752,
+              68.31012668732265
+            ],
+            [
+              93.63304816663523,
+              62.534180041945135
+            ],
+            [
+              94.10404639628403,
+              69.26019429381113
+            ],
+            [
+              99.22725258963753,
+              63.63349489804074
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": false
+        }
+      ],
+      "code": "",
+      "timeout": null,
+      "group": {
+        "id": 18,
+        "name": "Grab first pin",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "action",
+      "name": "Action 38",
+      "code": "robot.lift.matchload();",
+      "time": 0.0,
+      "group": {
+        "id": 18,
+        "name": "Grab first pin",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "motion",
+      "id": 45,
+      "g1_continuity": true,
+      "snap_to_previous": true,
+      "start_speed": 20.0,
+      "end_speed": 10.0,
+      "curves": [
+        {
+          "points": [
+            [
+              99.22725258963753,
+              63.63349489804074
+            ],
+            [
+              95.18775271996853,
+              68.06998459181263
+            ],
+            [
+              95.56789998781124,
+              77.58070031875741
+            ],
+            [
+              95.5048205980302,
+              83.26633171633111
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": true
+        },
+        {
+          "points": [
+            [
+              95.5048205980302,
+              83.26633171633111
+            ],
+            [
+              95.48524773937262,
+              85.03052220882026
+            ],
+            [
+              95.4387031774391,
+              86.44187039613143
+            ],
+            [
+              95.42246450674422,
+              89.81989154416769
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": true
+        }
+      ],
+      "code": "robot.lift.auto_clamp_task(2000).await;\nrobot.chassis.end_motion();",
+      "timeout": null,
+      "group": {
+        "id": 18,
+        "name": "Grab first pin",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "action",
+      "name": "Action 39",
+      "code": "robot.lift.score_height(1, \"midfield\");",
+      "time": 0.0,
+      "group": {
+        "id": 19,
+        "name": "Score first pin",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "motion",
+      "id": 46,
+      "g1_continuity": true,
+      "snap_to_previous": true,
+      "start_speed": 0.0,
+      "end_speed": 0.0,
+      "curves": [
+        {
+          "points": [
+            [
+              95.42246450674422,
+              89.81989154416769
+            ],
+            [
+              95.35855396088151,
+              103.11477137536757
+            ],
+            [
+              78.70380232301873,
+              85.2764338215382
+            ],
+            [
+              74.83662557777458,
+              77.61428275122016
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": true
+        }
+      ],
+      "code": "",
+      "timeout": null,
+      "group": {
+        "id": 19,
+        "name": "Score first pin",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "action",
+      "name": "Action 40",
+      "code": "robot.lift.drop();\nrobot.chassis.drive_raw_v(-5.0, -5.0, Duration::from_millis(300)).await;\nrobot.chassis.goal_reset((72.0, 72.0));",
+      "time": 300.0,
+      "group": {
+        "id": 19,
+        "name": "Score first pin",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "motion",
+      "id": 47,
+      "g1_continuity": true,
+      "snap_to_previous": true,
+      "start_speed": 20.0,
+      "end_speed": 30.0,
+      "curves": [
+        {
+          "points": [
+            [
+              74.83662557777458,
+              77.61428275122016
+            ],
+            [
+              77.5400781686865,
+              82.9707129139957
+            ],
+            [
+              91.1600428833843,
+              98.18100982861537
+            ],
+            [
+              95.78893626026745,
+              94.82227420970098
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": false
+        }
+      ],
+      "code": "",
+      "timeout": null,
+      "group": {
+        "id": 20,
+        "name": "Grab Second pin",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "motion",
+      "id": 48,
+      "g1_continuity": true,
+      "snap_to_previous": true,
+      "start_speed": 20.0,
+      "end_speed": 0.0,
+      "curves": [
+        {
+          "points": [
+            [
+              95.78893626026745,
+              94.82227420970098
+            ],
+            [
+              90.93266391958397,
+              98.34599652468447
+            ],
+            [
+              104.88719247431159,
+              108.36490839449297
+            ],
+            [
+              108.58842183379838,
+              111.09125618282633
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": true
+        },
+        {
+          "points": [
+            [
+              108.58842183379838,
+              111.09125618282633
+            ],
+            [
+              111.43705566260668,
+              113.18957697968177
+            ],
+            [
+              113.69526940883024,
+              114.9330626292286
+            ],
+            [
+              115.25408738466106,
+              116.0101963150292
+            ]
+          ],
+          "max_speed": 30.0,
+          "reversed": true
+        }
+      ],
+      "code": "robot.lift.matchload();\nrobot.lift.auto_clamp_task(2000).await;\nrobot.chassis.end_motion();",
+      "timeout": null,
+      "group": {
+        "id": 20,
+        "name": "Grab Second pin",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "motion",
+      "id": 49,
+      "g1_continuity": true,
+      "snap_to_previous": true,
+      "start_speed": 20.0,
+      "end_speed": 20.0,
+      "curves": [
+        {
+          "points": [
+            [
+              115.25408738466106,
+              116.0101963150292
+            ],
+            [
+              110.31790110537894,
+              112.59932179135835
+            ],
+            [
+              96.12653139169971,
+              103.43822379118318
+            ],
+            [
+              101.6495214558641,
+              96.86826742675056
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": false
+        }
+      ],
+      "code": "robot.lift.score_height(3, \"midfield\");",
+      "timeout": null,
+      "group": {
+        "id": 21,
+        "name": "Score second pin",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "motion",
+      "id": 50,
+      "g1_continuity": true,
+      "snap_to_previous": true,
+      "start_speed": 20.0,
+      "end_speed": 20.0,
+      "curves": [
+        {
+          "points": [
+            [
+              101.6495214558641,
+              96.86826742675056
+            ],
+            [
+              97.78863684967538,
+              101.46104110479034
+            ],
+            [
+              83.20148664124208,
+              93.88101384749217
+            ],
+            [
+              75.42032242592285,
+              78.73488174763226
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": true
+        }
+      ],
+      "code": "robot.chassis.end_motion_when(|| robot.lift.at_alliance_goal(), true).await;",
+      "timeout": null,
+      "group": {
+        "id": 21,
+        "name": "Score second pin",
+        "collapsed": true
+      }
+    },
+    {
+      "type": "action",
+      "name": "Action 41",
+      "code": "robot.lift.cascade_to_height(700.0);",
+      "time": 0.0,
+      "group": {
+        "id": 21,
+        "name": "Score second pin",
+        "collapsed": true
       }
     }
   ]
