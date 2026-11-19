@@ -21,6 +21,7 @@
       "type": "motion",
       "id": 1,
       "g1_continuity": true,
+      "snap_to_previous": true,
       "start_speed": 0.0,
       "end_speed": 0.0,
       "curves": [

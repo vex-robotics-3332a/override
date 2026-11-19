@@ -2,9 +2,10 @@ use vexide::{smart::motor::BrakeMode, sync::Mutex, controller::ControllerState};
 use alloc::rc::Rc;
 use core::cell::Cell;
 use vexide::prelude::*;
+use vexide::math::Angle;
 use std::time::{Duration, Instant};
 use crate::{SLEEP_INTERVAL, localization::localization::Localization, subsystems::drivetrain::Drivetrain, telemetry};
-use crate::localization::dsr::{Dsr, Wall};
+use crate::localization::dsr::{Dsr, GoalReset, Wall};
 use crate::helpers::Pose;
 use crate::telemetry::*;
 use crate::configs::ChassisConfig;
@@ -14,13 +15,15 @@ pub struct Chassis {
     pub localization: Rc<Mutex<Localization>>,
     pub imu: Rc<Mutex<InertialSensor>>,
     pub pose: Rc<Mutex<Pose>>,
+    pub goal_reset: GoalReset,
     pub config: ChassisConfig,
+
     pub end_requested: Cell<bool>,
     pub driving: Cell<bool>,
 }
 
 impl Chassis {
-    pub fn new(drivetrain: Rc<Mutex<Drivetrain>>, localization: Localization, config: ChassisConfig) -> Self {
+    pub fn new(drivetrain: Rc<Mutex<Drivetrain>>, localization: Localization, config: ChassisConfig, goal_reset: GoalReset) -> Self {
         let pose = Rc::clone(&localization.pose);
         let imu = Rc::clone(&localization.imu);
         Self {
@@ -28,6 +31,7 @@ impl Chassis {
             localization: Rc::new(Mutex::new(localization)),
             imu,
             pose,
+            goal_reset,
             config,
             end_requested: Cell::new(false),
             driving: Cell::new(false),
@@ -79,6 +83,8 @@ impl Chassis {
     pub fn start_localization(&mut self) {
         let localization = Rc::clone(&self.localization);
 
+        localization.try_lock().expect("Localization locked while starting localization").odometry.reset();
+
         spawn( async move {
             loop {
                 localization.try_lock().expect("Localization locked while running tick").run_tick();
@@ -118,6 +124,12 @@ impl Chassis {
         self.drivetrain.try_lock().expect("Dt locked while stopping raw v!").stop();
     }
 
+    pub fn drive_indefinite(&self, left_v: f64, right_v: f64) {
+        let mut dt = self.drivetrain.try_lock().expect("Dt locked while driving raw v!");
+        dt.left_side.spin_v(left_v);
+        dt.right_side.spin_v(right_v);
+    }
+
     /// Snaps the pose axis facing `wall` to `dsr`'s reading, retrying briefly on bad readings.
     /// Returns whether the reset was applied.
     #[allow(unused)]
@@ -130,6 +142,11 @@ impl Chassis {
             sleep(SLEEP_INTERVAL).await;
         }
         false
+    }
+
+    pub fn goal_reset(&self, goal_position: (f64, f64)) {
+        let new_pose = self.goal_reset.reset(self.get_pose(), Pose::new(goal_position.0, goal_position.1, Angle::ZERO));
+        *self.pose.try_lock().expect("bruh what") = new_pose;
     }
 
     pub fn set_brake_mode(&self, brake_mode: BrakeMode) {

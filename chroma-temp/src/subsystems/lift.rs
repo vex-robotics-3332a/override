@@ -33,7 +33,7 @@ impl Lift {
 
     pub async fn slam_score(&self) {
         self.cascade_to_height(200.0);
-        sleep(Duration::from_millis(70)).await;
+        sleep(Duration::from_millis(40)).await;
         self.matchload();
     }
 
@@ -48,7 +48,6 @@ impl Lift {
     pub fn at_neutral_goal(&self) -> bool {
         self.back_sensor.try_lock().expect("Back sensor locked during at neutral goal").is_close(0.4)
     }
-
 
     //basic manipulators
     pub fn macro_running(&self) -> bool {
@@ -83,7 +82,7 @@ impl Lift {
 
     pub fn claw_close(&self) {
         self.claw.try_lock().expect("Claw locked during close").close();
-        if self.cascade_height().as_degrees() < 280.0 {
+        if self.cascade_height().as_degrees() < 320.0 {
             self.spawn_macro(Duration::from_millis(350), |lift| async move {
                 //if lift is at ~20 deg picking up say just a pin, this ensures it doesn't jerk all the way up to pin height
                 sleep(Duration::from_millis(125)).await;
@@ -108,7 +107,13 @@ impl Lift {
         self.spawn_macro(Duration::from_millis(1000), |lift| async move {
             lift.claw_open();
             lift.move_to(Angle::from_degrees(280.0)).await;
-            println!("matchload pos {}", lift.cascade_height().as_degrees());
+        });
+    }
+
+    pub fn drop(&self) {
+        self.spawn_macro(Duration::from_millis(700), |lift| async move {
+            lift.move_to(Angle::from_degrees(lift.cascade_height().as_degrees() - 100.0)).await;
+            lift.claw_open();
         });
     }
 
@@ -120,10 +125,30 @@ impl Lift {
         });
     }
 
+    pub fn score_height(&self, pin_amount: u8, goal: &str) {
+        let offset = match goal {
+            "alliance" => 70.0,
+            "neutral" => 290.0,
+            "midfield" => 575.0,
+            _ => unreachable!(),
+        };
+
+        let desired_height = offset + match pin_amount {
+            //note: 0 is for the first pin in the stack
+            0 => 380.0,
+            1 => 900.0,
+            2 => 1550.0,
+            3 => 2190.0,
+            4 => 2780.0,
+            5 => 3324.0,
+            _ => unreachable!(),
+        };
+        self.cascade_to_height(desired_height);
+    }
     
     pub async fn auto_clamp_task(&self, timeout: u64) {
         let start = Instant::now();
-        let distance = 2.8;
+        let distance = 3.0;
         while self.back_sensor.try_lock().expect("Back sensor locked during auto clamp task").distance().is_none_or(|d| d > distance) {
             if start.elapsed() > Duration::from_millis(timeout) {
                 break;

@@ -30,6 +30,22 @@ pub async fn run(robot: &mut Robot) {
 """
 
 
+def _action_export_label(action: dict) -> str:
+    kind = action.get("type", "unknown")
+    if kind == "start":
+        return str(action.get("name") or "Start")
+    if kind == "motion":
+        return f"Motion {action.get('id', '?')}"
+    if kind == "action":
+        return str(action.get("name") or "Action")
+    if kind == "breakpoint":
+        name = str(action.get("name") or "Breakpoint")
+        if not action.get("enabled", True):
+            return f"{name} (off)"
+        return name
+    return kind
+
+
 def export_routine_macro(routine, code_root: str | None = None) -> Path:
     # routine is the json from routines, load it first
     # generates the rust macro to run this
@@ -45,6 +61,7 @@ def export_routine_macro(routine, code_root: str | None = None) -> Path:
         for action in routine["actions"]:
             # yeah this is hardcoded but idc at this point
             type = action["type"]
+            macro.write(f"\t// {_action_export_label(action)}\n")
             if type == "start":
                 macro.write(
                     f'\trobot.chassis.set_pose(Pose::new({action["x"]}, {action["y"]}, Angle::from_degrees({action["heading"]})));\n'
@@ -67,9 +84,8 @@ def export_routine_macro(routine, code_root: str | None = None) -> Path:
             if type == "action":
                 code = str(action.get("code") or "")
                 if code:
-                    macro.write("\t" + code)
-                    if not code.endswith("\n"):
-                        macro.write("\n")
+                    for line in code.rstrip("\n").split("\n"):
+                        macro.write(f"\t{line}\n" if line.strip() else "\n")
             if type == "breakpoint" and action.get("enabled", True):
                 macro.write("\treturn;\n")
             macro.write("\n")

@@ -1,7 +1,7 @@
 // Distance sensor resets: snap one pose axis to a field wall.
 use vexide::math::Angle;
 use vexide::prelude::*;
-use crate::helpers::{CartesianVector, Pose};
+use crate::helpers::{CartesianVector, PolarVector, Pose};
 use crate::MM_PER_INCH;
 
 /// Inner wall-to-wall field size, in inches.
@@ -58,7 +58,7 @@ impl Dsr {
     }
 
     /// `pose` with the axis perpendicular to `wall` replaced by the sensor reading.
-    /// Returns `None` if the reading is missing or longer than the field.
+    /// Returns `None` if the reading is missing, longer than the field, or shifts that axis by more than 10".
     pub fn get_pose(&self, pose: Pose, wall: Wall) -> Option<Pose> {
         let distance = self.distance()?;
         if distance > FIELD_WIDTH.max(FIELD_HEIGHT) {
@@ -69,11 +69,33 @@ impl Dsr {
         let heading_against_wall = pose.heading + self.offset.heading - wall.angle();
         let perpendicular_distance = heading_against_wall.as_radians().cos() * distance;
 
-        Some(match wall {
+        let reset = match wall {
             Wall::Right => Pose::new(FIELD_WIDTH - perpendicular_distance - global_offset.x, pose.y, pose.heading),
             Wall::Top => Pose::new(pose.x, FIELD_HEIGHT - perpendicular_distance - global_offset.y, pose.heading),
             Wall::Left => Pose::new(perpendicular_distance - global_offset.x, pose.y, pose.heading),
             Wall::Bottom => Pose::new(pose.x, perpendicular_distance - global_offset.y, pose.heading),
-        })
+        };
+
+        let axis_error = match wall {
+            Wall::Right | Wall::Left => (reset.x - pose.x).abs(),
+            Wall::Top | Wall::Bottom => (reset.y - pose.y).abs(),
+        };
+        (axis_error <= 10.0).then_some(reset)
+    }
+}
+
+pub struct GoalReset {
+    pub goal_radius: f64,
+    pub tracking_offset: f64,
+}
+
+impl GoalReset {
+    pub fn new(goal_radius: f64, tracking_offset: f64) -> Self {
+        Self { goal_radius, tracking_offset }
+    }
+
+    pub fn reset(&self, pose: Pose, goal_position: Pose) -> Pose {
+        let goal_vector = PolarVector::new(self.goal_radius + self.tracking_offset, pose.heading.as_degrees()).to_cartesian();
+        Pose::new(goal_vector.x + goal_position.x, goal_vector.y + goal_position.y, Angle::ZERO)
     }
 }

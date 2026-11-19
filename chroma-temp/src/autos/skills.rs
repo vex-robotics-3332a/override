@@ -13,73 +13,103 @@ use futures_util::future::join;
 
 pub async fn run(robot: &mut Robot) {
 	let _log_task = spawn(Chassis::log_pose(Rc::clone(&robot.chassis.pose)));
+	// Start
 	robot.chassis.set_pose(Pose::new(8.954823369565217, 60.003121074374164, Angle::from_degrees(180.0)));
 
-	robot.lift.cascade_to_height(300.0);
+	// Action 1
+	robot.lift.score_height(0, "alliance");
 	robot.toggle.auto_toggle_loop(Duration::from_millis(700)).await;
+	robot.chassis.distance_reset(&robot.dsrs.left, Wall::Bottom).await;
+	robot.chassis.distance_reset(&robot.dsrs.front, Wall::Left).await;
 
+	// Motion 1
 	let mut motion1 = MotionProfile::new("skills/motion1.json");
 	join(robot.chassis.drive_along(&mut motion1), async {
-		robot.chassis.end_motion_when(|| robot.lift.at_alliance_goal(), true).await;
+		//robot.chassis.end_motion_when(|| robot.lift.at_alliance_goal(), true).await;
 	}).await;
 
-	robot.lift.cascade_to_height(50.0);
-	sleep(Duration::from_millis(40)).await;
+	// Action 2
+	robot.lift.cascade_to_height(20.0);
+	sleep(Duration::from_millis(140)).await;
 	robot.lift.claw_open();
-	sleep(Duration::from_millis(100)).await;
+	sleep(Duration::from_millis(200)).await;
 
+	// Action 3
 	robot.lift.matchload();
 
+	// Motion 2
 	let mut motion2 = MotionProfile::new("skills/motion2.json");
 	robot.chassis.drive_along(&mut motion2).await;
 
+	// Action 4
+	robot.chassis.distance_reset(&robot.dsrs.left, Wall::Left).await;
+
+	// Motion 3
 	let mut motion3 = MotionProfile::new("skills/motion3.json");
 	robot.chassis.drive_along(&mut motion3).await;
 
-	robot.chassis.drive_raw_v(-1.0, -6.0, Duration::from_millis(750)).await;
+	// Action 5
+	robot.chassis.drive_raw_v(-5.0, -10.0, Duration::from_millis(600)).await;
 	robot.lift.claw_close();
 	sleep(Duration::from_millis(150)).await;
-	robot.chassis.distance_reset(&robot.dsrs.right, Wall::Bottom).await;
+	robot.chassis.distance_reset(&robot.dsrs.left, Wall::Bottom).await;
+	robot.chassis.distance_reset(&robot.dsrs.back, Wall::Left).await;
+	robot.chassis.drive_raw_v(-4.0, 10.0, Duration::from_millis(490)).await;
 
+	// arc odih test (off)
 
-	robot.lift.cascade_to_height(400.0);
+	// Action 6
+	robot.lift.score_height(1, "alliance");
 
+	// Motion 4
 	let mut motion4 = MotionProfile::new("skills/motion4.json");
 	robot.chassis.drive_along(&mut motion4).await;
 
+	// Motion 5
 	let mut motion5 = MotionProfile::new("skills/motion5.json");
 	join(robot.chassis.drive_along(&mut motion5), async {
 		robot.chassis.end_motion_when(|| robot.lift.at_alliance_goal(), true).await;
 	}).await;
 
-	robot.lift.slam_score().await;
+	// Action 7
+	robot.lift.drop();
+	robot.chassis.drive_raw_v(-5.0, -5.0, Duration::from_millis(450)).await;
+	robot.chassis.goal_reset((25.1, 48.3));
+	robot.lift.matchload();
 
+	// Motion 6
 	let mut motion6 = MotionProfile::new("skills/motion6.json");
 	robot.chassis.drive_along(&mut motion6).await;
 
-	robot.chassis.distance_reset(&robot.dsrs.left, Wall::Left).await;
+	// Action 8
+	//robot.chassis.distance_reset(&robot.dsrs.front, Wall::Left).await;
 
+	// Motion 7
 	let mut motion7 = MotionProfile::new("skills/motion7.json");
 	join(robot.chassis.drive_along(&mut motion7), async {
-		robot.lift.auto_clamp_task(3000).await;
-		sleep(Duration::from_millis(200)).await;
-		robot.chassis.end_motion();
+		robot.lift.auto_clamp_task(2500).await;
 	}).await;
 
-	robot.lift.cascade_to_height(700.0);
+	// Action 9
+	robot.lift.score_height(2, "alliance");
 
+	// Motion 8
 	let mut motion8 = MotionProfile::new("skills/motion8.json");
 	join(robot.chassis.drive_along(&mut motion8), async {
-		robot.chassis.end_motion_when(|| robot.lift.at_alliance_goal(), true).await;
+		//robot.chassis.end_motion_when(|| robot.lift.at_alliance_goal(), true).await;
 	}).await;
 
-	robot.lift.slam_score().await;
+	// Action 10
+	robot.lift.drop();
+	robot.chassis.drive_raw_v(-4.0, -4.0, Duration::from_millis(450)).await;
+	robot.lift.matchload();
+	robot.chassis.goal_reset((25.1, 48.3));
 
-	robot.chassis.distance_reset(&robot.dsrs.right, Wall::Bottom).await;
-
+	// Motion 9
 	let mut motion9 = MotionProfile::new("skills/motion9.json");
 	robot.chassis.drive_along(&mut motion9).await;
 
+	// Motion 10
 	let mut motion10 = MotionProfile::new("skills/motion10.json");
 	join(robot.chassis.drive_along(&mut motion10), async {
 		robot.lift.auto_clamp_task(3000).await;
@@ -87,39 +117,98 @@ pub async fn run(robot: &mut Robot) {
 		robot.chassis.end_motion();
 	}).await;
 
-	robot.lift.cascade_to_height(1000.0);
+	// Action 11
+	robot.lift.score_height(3, "alliance");
 
+	// Motion 11
 	let mut motion11 = MotionProfile::new("skills/motion11.json");
 	join(robot.chassis.drive_along(&mut motion11), async {
-		robot.chassis.end_motion_when(|| robot.lift.at_alliance_goal(), true).await;
+		//robot.chassis.end_motion_when(|| robot.lift.at_alliance_goal(), true).await;
 	}).await;
 
-	robot.lift.slam_score().await;
+	// Action 12
+	robot.lift.drop();
+	robot.chassis.drive_raw_v(-5.0, -5.0, Duration::from_millis(300)).await;
+	robot.lift.matchload();
+	robot.chassis.goal_reset((25.1, 48.3));
 
+	// Action 13
 	robot.lift.matchload();
 
+	// Motion 12
 	let mut motion12 = MotionProfile::new("skills/motion12.json");
 	robot.chassis.drive_along(&mut motion12).await;
 
+	// Motion 13
 	let mut motion13 = MotionProfile::new("skills/motion13.json");
 	join(robot.chassis.drive_along(&mut motion13), async {
 		robot.lift.auto_clamp_task(2000).await;
-		sleep(Duration::from_millis(100)).await;
 		robot.chassis.end_motion();
 	}).await;
 
-	let mut motion14 = MotionProfile::new("skills/motion14.json");
-	robot.chassis.drive_along(&mut motion14).await;
-
+	// Action 14
+	robot.chassis.drive_raw_v(-12.0, -12.0, Duration::from_millis(250));
 	robot.chassis.distance_reset(&robot.dsrs.right, Wall::Bottom).await;
 	robot.chassis.distance_reset(&robot.dsrs.back, Wall::Left).await;
 
+	// Motion 14
+	let mut motion14 = MotionProfile::new("skills/motion14.json");
+	join(robot.chassis.drive_along(&mut motion14), async {
+		sleep(Duration::from_millis(100)).await;
+		robot.lift.score_height(4, "alliance");
+	}).await;
+
+	// Motion 15
 	let mut motion15 = MotionProfile::new("skills/motion15.json");
 	join(robot.chassis.drive_along(&mut motion15), async {
 		robot.chassis.end_motion_when(|| robot.lift.at_alliance_goal(), true).await;
 	}).await;
 
+	// Action 15
 	robot.chassis.distance_reset(&robot.dsrs.front, Wall::Bottom).await;
 	robot.chassis.distance_reset(&robot.dsrs.right, Wall::Left).await;
+	robot.lift.matchload();
+	robot.chassis.drive_raw_v(-4.0, -4.0, Duration::from_millis(200)).await;
+	robot.chassis.goal_reset((25.1, 48.3));
+
+	// Action 16
+	robot.lift.matchload();
+
+	// Motion 16
+	let mut motion16 = MotionProfile::new("skills/motion16.json");
+	robot.chassis.drive_along(&mut motion16).await;
+
+	// Motion 17
+	let mut motion17 = MotionProfile::new("skills/motion17.json");
+	join(robot.chassis.drive_along(&mut motion17), async {
+		robot.lift.auto_clamp_task(2000).await;
+		robot.chassis.end_motion();
+	}).await;
+
+	// Action 17
+	robot.chassis.drive_raw_v(-12.0, -12.0, Duration::from_millis(250)).await;
+	robot.chassis.distance_reset(&robot.dsrs.right, Wall::Bottom).await;
+	robot.chassis.distance_reset(&robot.dsrs.back, Wall::Left).await;
+
+	// Motion 18
+	let mut motion18 = MotionProfile::new("skills/motion18.json");
+	join(robot.chassis.drive_along(&mut motion18), async {
+		sleep(Duration::from_millis(100)).await;
+		robot.lift.score_height(5, "alliance");
+	}).await;
+
+	// Motion 19
+	let mut motion19 = MotionProfile::new("skills/motion19.json");
+	join(robot.chassis.drive_along(&mut motion19), async {
+		robot.chassis.end_motion_when(|| robot.lift.at_alliance_goal(), true).await;
+	}).await;
+
+	// Action 18
+	robot.chassis.distance_reset(&robot.dsrs.front, Wall::Bottom).await;
+	robot.chassis.distance_reset(&robot.dsrs.right, Wall::Left).await;
+	robot.lift.drop();
+	robot.chassis.drive_raw_v(-4.0, -4.0, Duration::from_millis(200)).await;
+	robot.lift.matchload();
+	robot.chassis.goal_reset((25.1, 48.3));
 
 }

@@ -15,6 +15,7 @@
       "type": "motion",
       "id": 1,
       "g1_continuity": true,
+      "snap_to_previous": true,
       "start_speed": 20.0,
       "end_speed": 20.0,
       "curves": [
@@ -54,6 +55,7 @@
       "type": "motion",
       "id": 2,
       "g1_continuity": true,
+      "snap_to_previous": true,
       "start_speed": 10.0,
       "end_speed": 20.0,
       "curves": [
@@ -93,6 +95,7 @@
       "type": "motion",
       "id": 3,
       "g1_continuity": true,
+      "snap_to_previous": true,
       "start_speed": 30.0,
       "end_speed": 40.0,
       "curves": [
@@ -126,6 +129,7 @@
       "type": "motion",
       "id": 4,
       "g1_continuity": true,
+      "snap_to_previous": true,
       "start_speed": 30.0,
       "end_speed": 30.0,
       "curves": [

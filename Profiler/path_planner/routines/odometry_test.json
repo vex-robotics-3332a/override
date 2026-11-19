@@ -1,0 +1,117 @@
+{
+  "version": 1,
+  "name": "odometry_test",
+  "path": "autos/odometry_test.rs",
+  "actions": [
+    {
+      "type": "start",
+      "name": "Start",
+      "x": 9.004779522518241,
+      "y": 71.95976837785167,
+      "heading": 180.0,
+      "time": 0.0
+    },
+    {
+      "type": "motion",
+      "id": 1,
+      "g1_continuity": true,
+      "snap_to_previous": true,
+      "start_speed": 0.0,
+      "end_speed": 0.0,
+      "curves": [
+        {
+          "points": [
+            [
+              9.004779522518241,
+              71.95976837785167
+            ],
+            [
+              15.004779522518241,
+              71.95976837785167
+            ],
+            [
+              27.190174614839115,
+              71.9015559104518
+            ],
+            [
+              48.49130250148518,
+              71.84802549734994
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": true
+        }
+      ],
+      "code": "",
+      "timeout": null
+    },
+    {
+      "type": "motion",
+      "id": 2,
+      "g1_continuity": true,
+      "snap_to_previous": true,
+      "start_speed": 0.0,
+      "end_speed": 0.0,
+      "curves": [
+        {
+          "points": [
+            [
+              48.49130250148518,
+              71.84802549734994
+            ],
+            [
+              24.936553620556605,
+              71.90721933181808
+            ],
+            [
+              24.736157600886255,
+              79.00198803677996
+            ],
+            [
+              48.47603117596716,
+              95.40249264830504
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": false
+        }
+      ],
+      "code": "",
+      "timeout": null
+    },
+    {
+      "type": "motion",
+      "id": 3,
+      "g1_continuity": true,
+      "snap_to_previous": true,
+      "start_speed": 0.0,
+      "end_speed": 0.0,
+      "curves": [
+        {
+          "points": [
+            [
+              48.47603117596716,
+              95.40249264830504
+            ],
+            [
+              53.41256780973768,
+              98.81286008649137
+            ],
+            [
+              58.3491044435082,
+              102.2232275246777
+            ],
+            [
+              71.91300492399971,
+              95.28239175499675
+            ]
+          ],
+          "max_speed": 100.0,
+          "reversed": false
+        }
+      ],
+      "code": "",
+      "timeout": null
+    }
+  ]
+}

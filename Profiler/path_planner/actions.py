@@ -1210,6 +1210,10 @@ class MotionAction(RobotAction):
             self.motion.g1_continuity = bool(e.control.value)
             self._notify_change(commit=True)
 
+        def snap_change(e):
+            self.motion.snap_to_previous = bool(e.control.value)
+            self._notify_change(commit=True)
+
         def start_speed_apply(v):
             self.motion.start_speed = max(0.0, v)
             self._notify_change(commit=False)
@@ -1288,7 +1292,20 @@ class MotionAction(RobotAction):
                     ],
                 ),
                 ft.Text(
-                    "Aligns the first curve to the previous pose and keeps joins tangent-matched.",
+                    "Keeps curve joins tangent-matched within this motion.",
+                    size=11,
+                    color=ft.Colors.ON_SURFACE_VARIANT,
+                ),
+                ft.Row(
+                    spacing=8,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    controls=[
+                        ft.Text("Snap start to previous", size=13),
+                        ft.Switch(value=self.motion.snap_to_previous, on_change=snap_change),
+                    ],
+                ),
+                ft.Text(
+                    "Places curve 1 at the previous action's end pose when on.",
                     size=11,
                     color=ft.Colors.ON_SURFACE_VARIANT,
                 ),
@@ -1361,7 +1378,7 @@ class MotionAction(RobotAction):
 
         def reversed_change(e):
             curve.reversed = bool(e.control.value)
-            if self.motion.g1_continuity:
+            if self.motion.g1_continuity or self.motion.snap_to_previous:
                 prior = previous_action.end_pose() if previous_action is not None else None
                 self.motion.enforce_g1(previous_pose=prior)
             self._notify_change(commit=True)
@@ -2871,7 +2888,7 @@ class ActionList:
             return
         for nxt in self.actions[idx + 1 :]:
             if isinstance(nxt, MotionAction):
-                if nxt.motion.g1_continuity:
+                if nxt.motion.g1_continuity or nxt.motion.snap_to_previous:
                     nxt.motion.enforce_g1(previous_pose=pose)
                 return
             if nxt.end_pose() is not None:
@@ -3047,7 +3064,9 @@ class ActionList:
                 if self.selected is action:
                     self.refresh_editor()
             return
-        if isinstance(action, MotionAction) and action.motion.g1_continuity:
+        if isinstance(action, MotionAction) and (
+            action.motion.g1_continuity or action.motion.snap_to_previous
+        ):
             prev = self.previous_action(action)
             pose = prev.end_pose() if prev is not None else None
             action.motion.enforce_g1(previous_pose=pose)
@@ -3106,9 +3125,10 @@ class ActionList:
 
     def _insert_motion(self, index: int, group: ActionGroup | None = None):
         prev_pose = self._latest_pose(before=index)
-        motion = Motion(curves=[Curve(points=default_curve_points(prev_pose))])
-        if motion.g1_continuity:
-            motion.enforce_g1(previous_pose=prev_pose)
+        motion = Motion()
+        seed_pose = prev_pose if motion.snap_to_previous else None
+        motion.curves = [Curve(points=default_curve_points(seed_pose))]
+        motion.enforce_g1(previous_pose=prev_pose)
         action = MotionAction(motion, self._next_motion_id())
         action.group = group
         self.actions.insert(index, action)
@@ -3159,9 +3179,11 @@ class ActionList:
             prev_pose = prior_pose
         new_curve = Curve(points=default_curve_points(prev_pose))
         motion_action.motion.curves.append(new_curve)
-        if motion_action.motion.g1_continuity:
+        m = motion_action.motion
+        if m.g1_continuity or m.snap_to_previous:
             if prev_curve is not None:
-                apply_g1_forward(prev_curve, new_curve)
+                if m.g1_continuity:
+                    apply_g1_forward(prev_curve, new_curve)
             else:
                 motion_action.motion.enforce_g1(previous_pose=prior_pose)
         self.select_curve(motion_action, len(motion_action.motion.curves) - 1)

@@ -130,4 +130,12 @@ impl Odometry {
 
         gain_vector.rotate(chord_angle)
     }
+
+    pub fn reset(&mut self) {
+        self.previous_linear_travel = 0.0;
+        self.previous_horizontal_travel = 0.0;
+
+        self.linear_encoder.reset_travel();
+        self.horizontal_encoder.reset_travel();
+    }
 }

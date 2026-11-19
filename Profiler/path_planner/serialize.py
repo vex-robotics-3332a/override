@@ -59,6 +59,7 @@ def curve_from_json(data: dict[str, Any]) -> Curve:
 def motion_to_json(motion: Motion) -> dict[str, Any]:
     return {
         "g1_continuity": bool(motion.g1_continuity),
+        "snap_to_previous": bool(motion.snap_to_previous),
         "start_speed": float(motion.start_speed),
         "end_speed": float(motion.end_speed),
         "curves": [curve_to_json(c) for c in motion.curves],
@@ -72,6 +73,7 @@ def motion_from_json(data: dict[str, Any]) -> Motion:
     return Motion(
         curves=curves,
         g1_continuity=bool(data.get("g1_continuity", True)),
+        snap_to_previous=bool(data.get("snap_to_previous", True)),
         end_speed=float(data.get("end_speed", 0.0)),
         start_speed=float(data.get("start_speed", 0.0)),
     )

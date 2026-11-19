@@ -146,6 +146,7 @@ class Motion:
         self,
         curves: list[Curve] | None = None,
         g1_continuity: bool = True,
+        snap_to_previous: bool = True,
         end_speed: float = 0.0,
         start_speed: float = 0.0,
     ):
@@ -153,6 +154,7 @@ class Motion:
             curves = []
         self.curves = curves
         self.g1_continuity = g1_continuity
+        self.snap_to_previous = snap_to_previous
         # Percent of robot max speed at the start / end of the motion (0 = at rest).
         self.start_speed = start_speed
         self.end_speed = end_speed
@@ -167,12 +169,21 @@ class Motion:
     def total_time(self) -> float:
         return float(self.time)
 
+    def _snap_start_from_pose(self, pose: tuple[float, float, float]) -> None:
+        if not self.curves:
+            return
+        if self.g1_continuity:
+            apply_g1_from_pose(self.curves[0], pose)
+        else:
+            x, y, _ = pose
+            self.curves[0].points[0] = clamp_field_point(x, y)
+
     def enforce_g1(self, previous_pose: tuple[float, float, float] | None = None) -> None:
-        """Enforce G1 from previous_pose (optional) through every curve junction."""
+        """Snap the start of curve 0 to the prior pose (optional) and match internal joins."""
+        if self.snap_to_previous and previous_pose is not None:
+            self._snap_start_from_pose(previous_pose)
         if not self.g1_continuity:
             return
-        if previous_pose is not None and self.curves:
-            apply_g1_from_pose(self.curves[0], previous_pose)
         for i in range(len(self.curves) - 1):
             apply_g1_forward(self.curves[i], self.curves[i + 1])
 
@@ -183,14 +194,14 @@ class Motion:
         previous_pose: tuple[float, float, float] | None = None,
     ) -> None:
         """Propagate G1 after editing one control point on curve_index."""
-        if not self.g1_continuity or not self.curves:
+        if not self.curves:
             return
 
-        # First curve stays G1 with the previous action pose (e.g. Start).
+        # First curve vs the previous action pose (e.g. Start).
         if curve_index == 0 and previous_pose is not None and point_index in (0, 1):
-            if point_index == 0:
-                apply_g1_from_pose(self.curves[0], previous_pose)
-            else:
+            if point_index == 0 and self.snap_to_previous:
+                self._snap_start_from_pose(previous_pose)
+            elif point_index == 1 and self.g1_continuity and self.snap_to_previous:
                 # Keep P0 on the prior pose; project P1 onto the pose heading.
                 # Reversed: geometric tangent opposes robot heading.
                 x, y, heading_deg = previous_pose
@@ -207,8 +218,12 @@ class Motion:
                 self.curves[0].points[1] = clamp_field_point(
                     join[0] + ux * handle_len, join[1] + uy * handle_len
                 )
-            for i in range(len(self.curves) - 1):
-                apply_g1_forward(self.curves[i], self.curves[i + 1])
+            if self.g1_continuity:
+                for i in range(len(self.curves) - 1):
+                    apply_g1_forward(self.curves[i], self.curves[i + 1])
+            return
+
+        if not self.g1_continuity:
             return
 
         if point_index in (0, 1) and curve_index > 0:

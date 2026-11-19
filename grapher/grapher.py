@@ -13,7 +13,7 @@ import sys
 #   3, 3.458909
 
 file_paths = [
-    "/Volumes/ROBOT_SD/wrist.txt",
+    "/Volumes/ROBOT_SD/rotation.txt",
     # "/Volumes/ROBOT_SD/voltage.txt",
 ]
 # file_paths = [
