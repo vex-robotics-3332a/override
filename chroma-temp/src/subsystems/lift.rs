@@ -191,11 +191,12 @@ pub struct Cascade {
     pub stopping_mode: BrakeMode,
     pub exit_range: f64,
     pub max_lower: f64,
+    pub neutral_voltage: f64,
 }
 
 impl Cascade {
-    pub fn new(motors: Vec<Motor>, pid: PIDController, encoder: RotationSensor, stopping_mode: BrakeMode) -> Self {
-        Self { motors, encoder, pid, stopping_mode, exit_range: 6.0, max_lower: 12.0 }
+    pub fn new(motors: Vec<Motor>, pid: PIDController, encoder: RotationSensor, stopping_mode: BrakeMode, neutral_voltage: f64) -> Self {
+        Self { motors, encoder, pid, stopping_mode, exit_range: 6.0, max_lower: 12.0, neutral_voltage }
     }
 
     pub fn extend(&mut self) {
@@ -227,7 +228,7 @@ impl Cascade {
         };
         let dt = SLEEP_INTERVAL.as_millis() as f64;
         let error = (target_height - height).as_degrees();
-        let mut power = self.pid.get_power(error, dt);
+        let mut power = self.pid.get_power(error, dt) + self.neutral_voltage;
         if error < 0.0 {
             power = power.clamp(-self.max_lower, self.max_lower);
         }

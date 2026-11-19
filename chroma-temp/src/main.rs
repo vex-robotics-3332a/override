@@ -153,12 +153,14 @@ async fn main(peripherals: Peripherals) {
             0.08, 
             0.0, 
             0.0, 
+            0.0,
             f64::INFINITY, 
             12.0, 
             3.0, 
             f64::INFINITY), 
         lift_encoder,
-        BrakeMode::Hold);
+        BrakeMode::Hold,
+        1.5);
     let claw = Claw::new(AdiDigitalOut::new(peripherals.adi_a));
     let back_sensor = BackSensor::new(DistanceSensor::new(peripherals.port_17));
     let lift = Lift::new(cascade, claw, back_sensor);
@@ -174,10 +176,20 @@ async fn main(peripherals: Peripherals) {
 
     robot.lift.reset_encoder();
     robot.chassis.init().await;
-
+    robot.chassis.start_localization();
     robot.chassis.set_brake_mode(BrakeMode::Brake);
 
-    robot.autonomous().await;
+    // robot.autonomous().await;
+
+    println!("Starting pose logging");
+    let pose = Rc::clone(&robot.chassis.pose);
+    spawn(async move {
+        loop {
+            let pose = *pose.try_lock().expect("pose locked while logging");
+            println!("x: {:.2}, y: {:.2}, h: {:.2}", pose.x, pose.y, pose.heading.as_degrees());
+            sleep(Duration::from_millis(100)).await;
+        }
+    }).detach();
 
     robot.compete().await;
 }

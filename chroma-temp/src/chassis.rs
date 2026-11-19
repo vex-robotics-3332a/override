@@ -11,7 +11,7 @@ use crate::configs::ChassisConfig;
 
 pub struct Chassis {
     pub drivetrain: Rc<Mutex<Drivetrain>>,
-    pub localization: Option<Localization>,
+    pub localization: Rc<Mutex<Localization>>,
     pub imu: Rc<Mutex<InertialSensor>>,
     pub pose: Rc<Mutex<Pose>>,
     pub config: ChassisConfig,
@@ -25,7 +25,7 @@ impl Chassis {
         let imu = Rc::clone(&localization.imu);
         Self {
             drivetrain,
-            localization: Some(localization),
+            localization: Rc::new(Mutex::new(localization)),
             imu,
             pose,
             config,
@@ -62,11 +62,10 @@ impl Chassis {
     }
 
     pub async fn init(&mut self) {
-        let localization = self.localization.take().expect("init called twice or localization missing");
 
         {
-            let mut imu = localization
-                .imu
+            let localization = self.localization.try_lock().expect("Localization locked during calibration");
+            let mut imu = localization.imu
                 .try_lock()
                 .expect("IMU locked during calibration");
             if imu.calibrate().await.is_err() {
@@ -74,8 +73,18 @@ impl Chassis {
             }
         }
 
-        spawn(localization.run()).detach();
         spawn(Drivetrain::run_vel_ticking(Rc::clone(&self.drivetrain))).detach();
+    }
+
+    pub fn start_localization(&mut self) {
+        let localization = Rc::clone(&self.localization);
+
+        spawn( async move {
+            loop {
+                localization.try_lock().expect("Localization locked while running tick").run_tick();
+                sleep(SLEEP_INTERVAL).await;
+            }
+        }).detach();
     }
 
     pub fn get_pose(&self) -> Pose {
@@ -86,6 +95,7 @@ impl Chassis {
         *self.pose.try_lock().expect("Pose unexpectedly locked while writing!") = new_pose;
         // pose uses CCW+, IMU heading() is CW+, and localization reads -imu.heading().
         self.imu.try_lock().expect("IMU locked while resetting heading").set_heading(-new_pose.heading).ok();
+        self.localization.try_lock().expect("Localization locked while resetting heading").cancel_odometry_tick.set(true);
     }
 
     /// Drives each side at a fixed voltage for `time`, then stops. Can be ended early with `end_motion`.

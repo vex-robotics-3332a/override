@@ -13,10 +13,10 @@ use futures_util::future::join;
 
 pub async fn run(robot: &mut Robot) {
 	let _log_task = spawn(Chassis::log_pose(Rc::clone(&robot.chassis.pose)));
-	robot.chassis.set_pose(Pose::new(8.893806353213515, 60.17613648469569, Angle::from_degrees(180.0)));
+	robot.chassis.set_pose(Pose::new(8.954823369565217, 60.003121074374164, Angle::from_degrees(180.0)));
 
 	robot.lift.cascade_to_height(300.0);
-robot.toggle.auto_toggle_loop(Duration::from_millis(700)).await;
+	robot.toggle.auto_toggle_loop(Duration::from_millis(700)).await;
 
 	let mut motion1 = MotionProfile::new("skills/motion1.json");
 	join(robot.chassis.drive_along(&mut motion1), async {
@@ -24,9 +24,9 @@ robot.toggle.auto_toggle_loop(Duration::from_millis(700)).await;
 	}).await;
 
 	robot.lift.cascade_to_height(50.0);
-sleep(Duration::from_millis(40)).await;
-robot.lift.claw_open();
-sleep(Duration::from_millis(100)).await;
+	sleep(Duration::from_millis(40)).await;
+	robot.lift.claw_open();
+	sleep(Duration::from_millis(100)).await;
 
 	robot.lift.matchload();
 
@@ -37,9 +37,9 @@ sleep(Duration::from_millis(100)).await;
 	robot.chassis.drive_along(&mut motion3).await;
 
 	robot.chassis.drive_raw_v(-1.0, -6.0, Duration::from_millis(750)).await;
-robot.lift.claw_close();
-sleep(Duration::from_millis(150)).await;
-robot.chassis.distance_reset(&robot.dsrs.right, Wall::Bottom).await;
+	robot.lift.claw_close();
+	sleep(Duration::from_millis(150)).await;
+	robot.chassis.distance_reset(&robot.dsrs.right, Wall::Bottom).await;
 
 
 	robot.lift.cascade_to_height(400.0);
@@ -111,9 +111,15 @@ robot.chassis.distance_reset(&robot.dsrs.right, Wall::Bottom).await;
 	let mut motion14 = MotionProfile::new("skills/motion14.json");
 	robot.chassis.drive_along(&mut motion14).await;
 
+	robot.chassis.distance_reset(&robot.dsrs.right, Wall::Bottom).await;
+	robot.chassis.distance_reset(&robot.dsrs.back, Wall::Left).await;
+
 	let mut motion15 = MotionProfile::new("skills/motion15.json");
 	join(robot.chassis.drive_along(&mut motion15), async {
 		robot.chassis.end_motion_when(|| robot.lift.at_alliance_goal(), true).await;
 	}).await;
+
+	robot.chassis.distance_reset(&robot.dsrs.front, Wall::Bottom).await;
+	robot.chassis.distance_reset(&robot.dsrs.right, Wall::Left).await;
 
 }

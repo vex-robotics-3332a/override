@@ -3,7 +3,7 @@ pub struct PIDController {
     pub kp: f64,
     pub ki: f64,
     pub kd: f64,
-
+    pub feedforward: f64,
     pub slew: f64,
     pub max_output: f64,
     pub min_output: f64,
@@ -21,7 +21,9 @@ impl PIDController {
         kp: f64,
         ki: f64,
         kd: f64,
+        feedforward: f64,
         slew: f64,
+
         max_output: f64,
         min_output: f64,
         max_integral: f64,
@@ -30,6 +32,7 @@ impl PIDController {
             kp,
             ki,
             kd,
+            feedforward,
             slew,
             max_output,
             min_output,
@@ -67,7 +70,7 @@ impl PIDController {
         output = self.previous_output + delta;
 
         self.previous_output = output;
-        output
+        output + self.feedforward * error
     }
 
     pub fn set_inital_power(&mut self, power: f64) {

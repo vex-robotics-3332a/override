@@ -69,11 +69,14 @@ impl Toggle {
     pub async fn auto_toggle_loop(&mut self, timeout: Duration) {
         let start = Instant::now();
         loop {
-            self.auto_toggle();
-            sleep(SLEEP_INTERVAL).await;
-            if start.elapsed() > timeout {
+
+            if self.get_color() != self.alliance && start.elapsed() < timeout {
+                self.on();
+            } else {
                 break;
             }
+            sleep(SLEEP_INTERVAL).await;
         }
+        self.off();
     }
 }
