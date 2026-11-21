@@ -3700,9 +3700,6 @@ class ActionList:
     def _on_list_key_down(self, e: ft.KeyDownEvent):
         if _TextFocus.field is not None or self._modal is not None:
             return
-        if e.key in ("Delete", "Backspace") and not keys.command_held():
-            self.delete_selection()
-            return
         if not keys.command_held():
             return
         handler = {

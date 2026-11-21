@@ -136,7 +136,17 @@ async fn main(peripherals: Peripherals) {
             },
             exit_range: 0.5,
         },
-        goal_reset
+        goal_reset,
+        PIDController::new(
+            2.0,
+            0.0,
+            0.16,
+            0.0,
+            f64::INFINITY,
+            12.0,
+            -12.0,
+            f64::INFINITY
+        )
     );
 
 
@@ -152,17 +162,17 @@ async fn main(peripherals: Peripherals) {
     let cascade = Cascade::new(
         vec![lift_motor_a, lift_motor_b, lift_motor_c], 
         PIDController::new(
-            0.08, 
+            0.1, 
             0.0, 
-            0.0, 
+            0.001, 
             0.0,
             f64::INFINITY, 
             12.0, 
-            3.0, 
+            1.0, 
             f64::INFINITY), 
         lift_encoder,
         BrakeMode::Hold,
-        1.5);
+        0.0);
     let claw = Claw::new(AdiDigitalOut::new(peripherals.adi_a));
     let back_sensor = BackSensor::new(DistanceSensor::new(peripherals.port_17));
     let lift = Lift::new(cascade, claw, back_sensor);
@@ -175,11 +185,12 @@ async fn main(peripherals: Peripherals) {
     let mut robot = Robot::new(chassis, controller, lift, dsrs, auto_selector, toggle);
     
     /* Task Spawning */
-
+    println!("hiii!");
     robot.lift.reset_encoder();
     robot.chassis.init().await;
     robot.chassis.start_localization();
-    robot.chassis.set_brake_mode(BrakeMode::Brake);
+    robot.chassis.set_brake_mode(BrakeMode::Hold);
+    // robot.chassis.set_pose(Pose::new(0.0, 0.0, Angle::from_degrees(0.0)));
 
     // robot.autonomous().await;
 
@@ -200,8 +211,13 @@ async fn main(peripherals: Peripherals) {
     //         sleep(Duration::from_millis(300)).await;
     //     }
     // }).detach();
+    // robot.chassis.turn(100.0, 270.0, 1000.0).await;
+    
 
-    autos::skills::run(&mut robot).await;
+    // let start = Instant::now();
+    // autos::driver_2::run(&mut robot).await;
+    // println!("Total time: {:.2}", start.elapsed().as_secs_f64());
+    // sleep(Duration::from_millis(1000)).await;
 
     robot.compete().await;
 }

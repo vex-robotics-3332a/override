@@ -24,6 +24,7 @@ use crate::helpers::*;
 use crate::motion_control::ramsete::*;
 use crate::localization::dsr::Wall;
 use futures_util::future::join;
+use vexide::smart::motor::BrakeMode;
 
 pub async fn run(robot: &mut Robot) {
 	let _log_task = spawn(Chassis::log_pose(Rc::clone(&robot.chassis.pose)));

@@ -1,9 +1,12 @@
 use vexide::{smart::motor::BrakeMode, sync::Mutex, controller::ControllerState};
 use alloc::rc::Rc;
 use core::cell::Cell;
+use core::pin::pin;
+use futures_util::future::{select, Either};
 use vexide::prelude::*;
 use vexide::math::Angle;
 use std::time::{Duration, Instant};
+use crate::motion_control::pid::PIDController;
 use crate::{SLEEP_INTERVAL, localization::localization::Localization, subsystems::drivetrain::Drivetrain, telemetry};
 use crate::localization::dsr::{Dsr, GoalReset, Wall};
 use crate::helpers::Pose;
@@ -16,6 +19,7 @@ pub struct Chassis {
     pub imu: Rc<Mutex<InertialSensor>>,
     pub pose: Rc<Mutex<Pose>>,
     pub goal_reset: GoalReset,
+    pub turn_pid: PIDController,
     pub config: ChassisConfig,
 
     pub end_requested: Cell<bool>,
@@ -23,7 +27,7 @@ pub struct Chassis {
 }
 
 impl Chassis {
-    pub fn new(drivetrain: Rc<Mutex<Drivetrain>>, localization: Localization, config: ChassisConfig, goal_reset: GoalReset) -> Self {
+    pub fn new(drivetrain: Rc<Mutex<Drivetrain>>, localization: Localization,  config: ChassisConfig, goal_reset: GoalReset, turn_pid: PIDController,) -> Self {
         let pose = Rc::clone(&localization.pose);
         let imu = Rc::clone(&localization.imu);
         Self {
@@ -32,6 +36,7 @@ impl Chassis {
             imu,
             pose,
             goal_reset,
+            turn_pid,
             config,
             end_requested: Cell::new(false),
             driving: Cell::new(false),
@@ -72,8 +77,11 @@ impl Chassis {
             let mut imu = localization.imu
                 .try_lock()
                 .expect("IMU locked during calibration");
-            if imu.calibrate().await.is_err() {
-                println!("Calibration failed!");
+            // A status of 0 makes vexide restart its own timeout on every poll, so a missing IMU never returns.
+            let calibrate = imu.calibrate();
+            match select(pin!(calibrate), pin!(sleep(Duration::from_secs(5)))).await {
+                Either::Left((Ok(()), _)) => {}
+                _ => println!("Calibration failed!"),
             }
         }
 

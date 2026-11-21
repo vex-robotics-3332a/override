@@ -56,8 +56,14 @@ impl PIDController {
         self.integral += error * dt;
         self.integral = self.integral.clamp(-self.max_integral, self.max_integral);
 
-        let derivative = self.kd * (error - self.previous_error) / dt;
+        // previous_error is 0 after reset, so the first sample would treat the whole error as the change.
+        let derivative = if self.derivative_ready && dt > 0.0 {
+            self.kd * (error - self.previous_error) / dt
+        } else {
+            0.0
+        };
         self.previous_error = error;
+        self.derivative_ready = true;
 
         let mut output = proportional + self.ki * self.integral + derivative;
         if output > 0.0 {

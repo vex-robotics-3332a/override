@@ -25,6 +25,13 @@ impl Robot {
     pub async fn op_control(&mut self) {
         loop {
             let controller_state = self.controller.state().unwrap_or_default();
+            if controller_state.button_down.is_now_pressed() {
+                let routine = self.auto_selector.selected();
+                let name = routine.name;
+                let run = routine.run;
+                println!("Autonomous: {}", name);
+                run(self).await;
+            }
             self.chassis.op_control_tick(&controller_state);
             self.binding(&controller_state);
             self.auto_selector.tick(&mut self.controller, &controller_state).await;
@@ -95,6 +102,10 @@ impl Robot {
 
         // if controller_state.button_a.is_now_pressed() {
         //     self.lift.drop_stack();
+        }
+
+        if controller_state.button_b.is_now_pressed() {
+            self.lift.drop();
         }
 
         if controller_state.button_r1.is_pressed() {

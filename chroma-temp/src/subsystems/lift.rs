@@ -42,11 +42,11 @@ impl Lift {
     }
     //back sensor stuff
     pub fn at_alliance_goal(&self) -> bool {
-        self.back_sensor.try_lock().expect("Back sensor locked during at alliance goal").is_close(1.8)
+        self.back_sensor.try_lock().expect("Back sensor locked during at alliance goal").is_close(2.3)
     }
 
     pub fn at_neutral_goal(&self) -> bool {
-        self.back_sensor.try_lock().expect("Back sensor locked during at neutral goal").is_close(0.4)
+        self.back_sensor.try_lock().expect("Back sensor locked during at neutral goal").is_close(0.6)
     }
 
     //basic manipulators
@@ -83,9 +83,9 @@ impl Lift {
     pub fn claw_close(&self) {
         self.claw.try_lock().expect("Claw locked during close").close();
         if self.cascade_height().as_degrees() < 320.0 {
-            self.spawn_macro(Duration::from_millis(350), |lift| async move {
+            self.spawn_macro(Duration::from_millis(400), |lift| async move {
                 //if lift is at ~20 deg picking up say just a pin, this ensures it doesn't jerk all the way up to pin height
-                sleep(Duration::from_millis(125)).await;
+                sleep(Duration::from_millis(130)).await;
                 lift.move_to(Angle::from_degrees(lift.cascade_height().as_degrees() + 100.0)).await;
             });
         }
@@ -105,14 +105,24 @@ impl Lift {
 
     pub fn matchload(&self) {
         self.spawn_macro(Duration::from_millis(1000), |lift| async move {
+            // println!("Start position: {:.2}", lift.cascade_height().as_degrees());
             lift.claw_open();
-            lift.move_to(Angle::from_degrees(280.0)).await;
+            lift.move_to(Angle::from_degrees(300.0)).await;
+            // println!("End position: {:.2}", lift.cascade_height().as_degrees());
         });
     }
 
     pub fn drop(&self) {
         self.spawn_macro(Duration::from_millis(700), |lift| async move {
-            lift.move_to(Angle::from_degrees(lift.cascade_height().as_degrees() - 100.0)).await;
+            // let start = Instant::now();
+            // while lift.cascade.try_lock().expect("Cascade locked during move").tick_move_height(Angle::from_degrees(300.0)) {
+            //     if start.elapsed().as_millis() > 75 {
+            //         lift.claw_open();
+            //     }
+            //     sleep(SLEEP_INTERVAL).await;
+            // }
+            let desired_height = lift.cascade_height() - Angle::from_degrees(200.0);
+            lift.move_to(desired_height).await;
             lift.claw_open();
         });
     }
@@ -121,15 +131,15 @@ impl Lift {
         let height_angle = Angle::from_degrees(height);
         self.spawn_macro(Duration::from_millis(2000), |lift| async move {
             lift.move_to(height_angle).await;
-            println!("casc h: {}", lift.cascade_height().as_degrees());
+            // println!("casc h: {}", lift.cascade_height().as_degrees());
         });
     }
 
     pub fn score_height(&self, pin_amount: u8, goal: &str) {
         let offset = match goal {
-            "alliance" => 70.0,
-            "neutral" => 290.0,
-            "midfield" => 575.0,
+            "alliance" => 100.0,
+            "neutral" => 320.0,
+            "midfield" => 605.0,
             _ => unreachable!(),
         };
 
@@ -149,6 +159,18 @@ impl Lift {
     pub async fn auto_clamp_task(&self, timeout: u64) {
         let start = Instant::now();
         let distance = 3.0;
+        while self.back_sensor.try_lock().expect("Back sensor locked during auto clamp task").distance().is_none_or(|d| d > distance) {
+            if start.elapsed() > Duration::from_millis(timeout) {
+                break;
+            }
+            sleep(SLEEP_INTERVAL).await;
+        }
+        self.claw_close();
+    }
+
+    pub async fn auto_clamp_matchload_task(&self, timeout: u64) {
+        let start = Instant::now();
+        let distance = 2.2;
         while self.back_sensor.try_lock().expect("Back sensor locked during auto clamp task").distance().is_none_or(|d| d > distance) {
             if start.elapsed() > Duration::from_millis(timeout) {
                 break;
@@ -221,7 +243,7 @@ pub struct Cascade {
 
 impl Cascade {
     pub fn new(motors: Vec<Motor>, pid: PIDController, encoder: RotationSensor, stopping_mode: BrakeMode, neutral_voltage: f64) -> Self {
-        Self { motors, encoder, pid, stopping_mode, exit_range: 6.0, max_lower: 12.0, neutral_voltage }
+        Self { motors, encoder, pid, stopping_mode, exit_range: 2.0, max_lower: 12.0, neutral_voltage }
     }
 
     pub fn extend(&mut self) {
@@ -251,7 +273,7 @@ impl Cascade {
             self.stop();
             return false;
         };
-        let dt = SLEEP_INTERVAL.as_millis() as f64;
+        let dt = SLEEP_INTERVAL.as_secs_f64();
         let error = (target_height - height).as_degrees();
         let mut power = self.pid.get_power(error, dt) + self.neutral_voltage;
         if error < 0.0 {

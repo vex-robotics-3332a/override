@@ -109,7 +109,7 @@ impl AutoSelector {
         }
     }
 
-    /// Left/right arrows cycle the selection, up/down swap alliance; the controller screen is redrawn whenever either changes.
+    /// Left/right arrows cycle the selection, up swaps alliance; the controller screen is redrawn whenever either changes.
     /// Sends at most one screen write per tick, spaced by `WRITE_INTERVAL`.
     pub async fn tick(&mut self, controller: &mut Controller, state: &ControllerState) {
         if state.button_left.is_now_pressed() {
@@ -118,7 +118,7 @@ impl AutoSelector {
         if state.button_right.is_now_pressed() {
             self.next();
         }
-        if state.button_up.is_now_pressed() || state.button_down.is_now_pressed() {
+        if state.button_up.is_now_pressed() {
             self.toggle_alliance();
         }
 
